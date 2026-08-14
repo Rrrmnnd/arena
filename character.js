@@ -92,6 +92,12 @@ class Character {
     return false;
   }
 
+  // Drawn right after the arena/wall-cracks but before EITHER fighter's own body — for anything
+  // a character leaves sitting on the floor itself rather than carried on a character (e.g. Fire
+  // Mage's lava patches), so both fighters visually stand on top of it instead of it painting
+  // over them. Empty for every character that doesn't have any; see main.js's drawFrame.
+  drawGroundEffects(ctx) {}
+
   // Extra fighter-owned bodies that should be just as targetable and collidable as this
   // character itself (e.g. the Ninja's shadow clone) — main.js folds these into both who the
   // opponent aims at (picking whichever of this character + its extra bodies is nearest) and

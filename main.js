@@ -6,7 +6,9 @@ const ROUND_END_GRACE = 3.0; // seconds after a winner is decided before we cut 
 
 // The full cast: each entry builds a brand-new instance so every round starts from a clean,
 // canonical state (the constructor is the only source of truth — no parallel reset logic to
-// keep in sync with it).
+// keep in sync with it). `excludeFromTwitch: true` keeps an entry pickable in the normal manual
+// setup screen while leaving it out of triggerTwitchBattle()'s random draw — for a character
+// that's still new/untested and not meant to show up unannounced on someone's stream yet.
 const ROSTER = [
   { label: "Giant", ctor: () => new Giant(0, 0) },
   { label: "Punch Man", ctor: () => new PunchMan(0, 0) },
@@ -17,6 +19,7 @@ const ROSTER = [
   { label: "Punch Man (New)", ctor: () => new PunchManNew(0, 0) },
   { label: "Ninja", ctor: () => new Ninja(0, 0) },
   { label: "Virus", ctor: () => new Virus(0, 0) },
+  { label: "Fire Mage", ctor: () => new FireMage(0, 0), excludeFromTwitch: true },
 ];
 
 let gameMode = "1v1"; // "1v1" | "vsboss" — which mode is currently toggled in the setup screen
@@ -176,9 +179,10 @@ function triggerTwitchBattle() {
   if (mode !== "twitchIdle") return;
 
   gameMode = "1v1";
-  let a = Math.floor(Math.random() * ROSTER.length);
+  const eligible = ROSTER.map((r, i) => i).filter((i) => !ROSTER[i].excludeFromTwitch);
+  let a = eligible[Math.floor(Math.random() * eligible.length)];
   let b;
-  do { b = Math.floor(Math.random() * ROSTER.length); } while (b === a);
+  do { b = eligible[Math.floor(Math.random() * eligible.length)]; } while (b === a);
   pickA = a;
   pickB = b;
 
@@ -807,9 +811,13 @@ function render(time) {
       if (gameMode === "lab") {
         labDraw(c);
       } else if (gameMode === "1v1") {
+        fighterA.drawGroundEffects(c);
+        fighterB.drawGroundEffects(c);
         fighterA.draw(c);
         fighterB.draw(c);
       } else if (boss) {
+        boss.drawGroundEffects(c);
+        for (const ally of allies) ally.drawGroundEffects(c);
         boss.draw(c);
         for (const ally of allies) ally.draw(c);
       }
