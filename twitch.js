@@ -182,10 +182,18 @@ async function connectTwitch(token) {
     showTwitchLoginButton();
     return;
   }
+  // Persisted here regardless of how the token arrived (redirect, localStorage on reload, or
+  // pasted in from a session logged in elsewhere) so every successful path ends up remembered
+  // the same way.
+  localStorage.setItem(TWITCH_TOKEN_KEY, token);
   twitchToken = token;
   twitchUserId = info.user_id;
   twitchLogin = info.login;
   hideTwitchLoginButton();
+  const copyInput = document.getElementById("twitchCopyTokenInput");
+  const copyRow = document.getElementById("twitchCopyRow");
+  if (copyInput) copyInput.value = token;
+  if (copyRow) copyRow.classList.remove("hidden");
   setTwitchStatus(`已連線：${info.login}　建立監聽中…`);
   openTwitchSocket();
   // Drops straight into the waiting screen — connecting is a deliberate one-time setup action
@@ -210,6 +218,28 @@ function initTwitchPanel() {
   // filter and the whole idle<->battle<->idle cycle actually works before going live with it.
   const testBtn = document.getElementById("twitchTestBtn");
   if (testBtn) testBtn.addEventListener("click", () => triggerTwitchBattle());
+
+  // OBS's built-in Browser Source runs an older bundled Chromium that frequently can't handle
+  // Twitch's own login/consent page properly (the Authorize button ends up stuck disabled) — the
+  // workaround is logging in on this same page but in a real, up-to-date browser instead, then
+  // copying the token it shows there and pasting it in here. Neither instance needs to share a
+  // browser profile: the token itself is all that has to cross over.
+  const copyBtn = document.getElementById("twitchCopyTokenBtn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      const input = document.getElementById("twitchCopyTokenInput");
+      input.select();
+      navigator.clipboard?.writeText(input.value).catch(() => document.execCommand("copy"));
+    });
+  }
+  const pasteBtn = document.getElementById("twitchPasteTokenBtn");
+  const pasteInput = document.getElementById("twitchPasteTokenInput");
+  if (pasteBtn && pasteInput) {
+    pasteBtn.addEventListener("click", () => {
+      const token = pasteInput.value.trim();
+      if (token) connectTwitch(token);
+    });
+  }
 
   // If the streamer Tabs out into the normal manual setup screen (or a manual round is still
   // sitting on its keep/discard prompt) the subscription/socket stays alive underneath the whole

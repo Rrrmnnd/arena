@@ -102,3 +102,9 @@ html.twitch-transparent, html.twitch-transparent body {
   font: 12px Arial, sans-serif;
   padding: 2px 4px;
 }
+
+#twitchCopyRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
