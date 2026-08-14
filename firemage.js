@@ -2,29 +2,31 @@
 // separate character rather than one character with a switchable element. Fire Mage's identity
 // is ground control, not direct burst — its only attack right now is a lobbed fireball that
 // leaves a patch of lava wherever it actually ends up (on the opponent's own position if it hit
-// them, or wherever it struck a wall otherwise), which then burns anyone standing in it for a
-// long while. No ultimate yet — that's still being designed; VIRUS_-style ultimateRatio simply
-// isn't overridden, so no ultimate bar shows in its HUD until there is one.
+// them, or wherever it struck a wall otherwise), which then burns the opponent (not Fire Mage
+// itself — immune to its own lava) for a long while. No ultimate yet — that's still being
+// designed; ultimateRatio simply isn't overridden, so no ultimate bar shows in its HUD yet.
 //
 // Deliberately excluded from the Twitch integration's random-battle roster for now (see
 // ROSTER_TWITCH in main.js) — it's still new/untested and the request was explicit about that.
 
-const FIREMAGE_MAX_HP = 65;   // glass cannon — no melee of its own at all right now, purely zone control
+const FIREMAGE_MAX_HP = 100;  // no melee of its own at all right now, purely zone control
 const FIREMAGE_SPEED   = 240;
 const FIREMAGE_SIZE    = CHAR_BASE_SIZE * 0.85; // a bit smaller than Punch Man — a slight, robed figure
 
 const FIREMAGE_FIREBALL_DAMAGE   = 8;
-const FIREMAGE_FIREBALL_COOLDOWN = 1.6;
+const FIREMAGE_FIREBALL_COOLDOWN = 3.0;
 const FIREMAGE_FIREBALL_SPEED    = 480;
 const FIREMAGE_FIREBALL_LIFE     = 2.5; // safety timeout in case it somehow never reaches a wall
 
 // The actual point of the character: wherever a fireball ends up — the opponent's own current
 // position if it hit them, or the wall it struck otherwise — a patch of ground catches fire and
-// keeps burning long after the fireball itself is gone. Anyone standing in it (Fire Mage
-// included — this isn't a one-sided hazard) takes a tick every second for as long as it lasts.
+// keeps burning long after the fireball itself is gone. Opponent-only (Fire Mage itself is
+// immune to its own lava, unlike the first pass of this) — same 5/sec overall rate as before,
+// just ticked in smaller, more frequent steps (1 dmg every 0.2s) so standing in it a moment
+// doesn't feel like an all-or-nothing single big hit.
 const FIREMAGE_LAVA_DURATION      = 15.0;
-const FIREMAGE_LAVA_TICK_DAMAGE   = 5;
-const FIREMAGE_LAVA_TICK_INTERVAL = 1.0;
+const FIREMAGE_LAVA_TICK_DAMAGE   = 1;
+const FIREMAGE_LAVA_TICK_INTERVAL = 0.2;
 const FIREMAGE_LAVA_RADIUS        = 50; // roughly a full body-width bigger than a character, so standing near the middle reliably counts
 const FIREMAGE_LAVA_GROW_TIME     = 0.35; // seconds to grow in from nothing when it first lands
 const FIREMAGE_LAVA_FADE_TIME     = 1.5;  // seconds of fading out right before it actually expires
@@ -153,12 +155,12 @@ class FireMage extends Character {
       lp.tickTimer -= dt;
       if (lp.tickTimer <= 0) {
         lp.tickTimer += FIREMAGE_LAVA_TICK_INTERVAL;
-        for (const c of [this, opponent]) {
-          if (!c || !c.alive) continue;
-          const dist = Math.hypot(c.x - lp.x, c.y - lp.y);
-          if (dist <= FIREMAGE_LAVA_RADIUS + c.size / 2) {
-            c.takeDamage(FIREMAGE_LAVA_TICK_DAMAGE, FIREMAGE_LAVA_DAMAGE_COLOR);
-            spawnImpactParticles(c.x, c.y - c.size * 0.2, ["#ff7a1a", "#ffcf40"], 6, 0.6, 0);
+        // Opponent only — Fire Mage is immune to its own lava.
+        if (opponent && opponent.alive) {
+          const dist = Math.hypot(opponent.x - lp.x, opponent.y - lp.y);
+          if (dist <= FIREMAGE_LAVA_RADIUS + opponent.size / 2) {
+            opponent.takeDamage(FIREMAGE_LAVA_TICK_DAMAGE, FIREMAGE_LAVA_DAMAGE_COLOR);
+            spawnImpactParticles(opponent.x, opponent.y - opponent.size * 0.2, ["#ff7a1a", "#ffcf40"], 6, 0.6, 0);
           }
         }
       }
