@@ -177,6 +177,7 @@ function reconnectTwitchSocket() {
 // idle state, and the MediaRecorder just keeps buffering chunks nobody will ever collect.
 function enterTwitchIdle() {
   if (isRecording) stopRecording();
+  applyLayout("twitch"); // dense layout for looking right as an OBS overlay — see arena.js
   mode = "twitchIdle";
 }
 

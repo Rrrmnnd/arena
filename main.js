@@ -36,7 +36,8 @@ function placeAtCorners() {
   fighterB.y = ARENA.y + CORNER_MARGIN + fighterB.size / 2;
 }
 
-const HUD_Y = 190;
+// HUD_Y itself now lives in arena.js (a `let`, updated by setArenaLayout alongside WIDTH/HEIGHT/
+// ARENA/TITLE_Y) since the compact "twitch" layout needs its own tighter value — see there.
 const HUD_W = 280;
 const HUD_MARGIN = 50;
 
@@ -183,6 +184,7 @@ function triggerTwitchBattle() {
 
   twitchRoundActive = true;
   mode = "battle";
+  applyLayout("twitch"); // defensive — should already be set by enterTwitchIdle(), the only path here
   reset();
   roundState = "playing";
   endTimer = 0;

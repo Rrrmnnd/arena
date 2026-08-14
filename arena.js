@@ -5,18 +5,30 @@
 const ARENA_MARGIN = 60;
 const ARENA_BORDER  = 14;
 
-// Two canvas layouts. The battle modes use the 9:16 portrait frame with a centered square
-// arena; the lab uses a 16:9 frame with a wide arena and a control panel down the right.
-// WIDTH/HEIGHT/ARENA are read fresh on every use across the codebase, so swapping them here
-// re-lays-out everything — the callers just need to resize the canvases (see applyLayout).
+// Three canvas layouts. The battle modes use the 9:16 portrait frame with a centered square
+// arena; the lab uses a 16:9 frame with a wide arena and a control panel down the right; twitch
+// is the same portrait shape as normal battle but squashed noticeably shorter (title/HUD sit
+// right on top of the arena, almost no dead space below it) for looking dense as an OBS overlay,
+// used only while parked waiting for/showing a Channel Points-triggered fight — see
+// twitch.js's enterTwitchIdle() and main.js's triggerTwitchBattle(). Deliberately NOT just a
+// smaller version of "portrait" globally: the character-select screen's own roster-picker
+// layout (SETUP_ROSTER_START_Y etc. in main.js) needs the full portrait height to fit all 9
+// entries, and openSetup() always forces the canvas back to "portrait" before showing it
+// regardless of whichever of these was active, so that screen is unaffected either way.
+// WIDTH/HEIGHT/ARENA (and TITLE_Y/HUD_Y, for whichever layouts actually use those) are read
+// fresh on every use across the codebase, so swapping them here re-lays-out everything — the
+// callers just need to resize the canvases (see applyLayout).
 const ARENA_LAYOUTS = {
-  portrait: { w: 720,  h: 1280, arena: { x: ARENA_MARGIN, y: 370, w: 600, h: 600 } },
-  lab:      { w: 1280, h: 720,  arena: { x: 24, y: 92, w: 892, h: 604 } },
+  portrait: { w: 720,  h: 1280, arena: { x: ARENA_MARGIN, y: 370, w: 600, h: 600 }, titleY: 100, hudY: 190 },
+  lab:      { w: 1280, h: 720,  arena: { x: 24, y: 92, w: 892, h: 604 } }, // no titleY/hudY — lab draws its own title/panel independently of drawTitle()/HUD_Y
+  twitch:   { w: 720,  h: 850,  arena: { x: ARENA_MARGIN, y: 220, w: 600, h: 600 }, titleY: 40, hudY: 75 },
 };
 
 let WIDTH  = ARENA_LAYOUTS.portrait.w;
 let HEIGHT = ARENA_LAYOUTS.portrait.h;
 let ARENA  = { ...ARENA_LAYOUTS.portrait.arena };
+let TITLE_Y = ARENA_LAYOUTS.portrait.titleY;
+let HUD_Y = ARENA_LAYOUTS.portrait.hudY;
 let arenaLayout = "portrait";
 
 function setArenaLayout(name) {
@@ -25,6 +37,8 @@ function setArenaLayout(name) {
   WIDTH = L.w;
   HEIGHT = L.h;
   ARENA = { ...L.arena };
+  if (L.titleY !== undefined) TITLE_Y = L.titleY;
+  if (L.hudY !== undefined) HUD_Y = L.hudY;
   arenaLayout = name;
   return true;
 }
@@ -106,5 +120,5 @@ function drawTitle(ctx, text = "Battle Arena") {
   ctx.fillStyle = "#ffdc32";
   ctx.font = "bold 40px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(text, WIDTH / 2, 100);
+  ctx.fillText(text, WIDTH / 2, TITLE_Y);
 }
