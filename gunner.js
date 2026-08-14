@@ -30,10 +30,10 @@ function gunnerLerp(a, b, t) {
 // final entry is the beam tier instead (see isBeam below) and has no evolveTime — it's the
 // last stop. Every tier fires continuously at its own fireRate — no burst pauses.
 const GUNNER_WEAPON_TIERS = [
-  { name: "Pistol", fireRate: 2,     damage: 1,  evolveTime: 10.0 },
-  { name: "SMG",     fireRate: 5.5,  damage: 1,  evolveTime: 15.0 },
-  { name: "Rifle",   fireRate: 3,    damage: 5,  evolveTime: 18.0 },
-  { name: "Rocket Launcher", fireRate: 0.25, damage: 25, evolveTime: 20.0 },
+  { name: "Pistol", fireRate: 2,     damage: 1,  evolveTime: 9.0 },  // Pistol->SMG: was 10.0, -1s
+  { name: "SMG",     fireRate: 5.5,  damage: 1,  evolveTime: 13.0 }, // SMG->Rifle: was 15.0, -2s
+  { name: "Rifle",   fireRate: 3,    damage: 5,  evolveTime: 16.0 }, // Rifle->Rocket Launcher: was 18.0, -2s
+  { name: "Rocket Launcher", fireRate: 0.25, damage: 25, evolveTime: 18.0 }, // Rocket Launcher->Laser Cannon: was 20.0, -2s
   { name: "Laser Cannon", isBeam: true, tickDamage: 6, tickInterval: 0.25 },
 ];
 
