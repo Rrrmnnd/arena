@@ -1264,6 +1264,15 @@ class Virus extends Character {
     ctx.restore();
   }
 
+  // The floating HP number/bar that normally hovers over Virus's own head reads as clutter once
+  // it's sitting in the middle of the arena-engulfing victory mass — the whole point there is the
+  // battlefield looking consumed, not still showing routine combat HUD through it. Everywhere
+  // else (mid-fight, dead) it behaves exactly like every other character's.
+  drawFieldHpBar(ctx) {
+    if (this.celebratingVictory) return;
+    super.drawFieldHpBar(ctx);
+  }
+
   draw(ctx) {
     this.drawSpikesInFlight(ctx);
     this.drawInfectionIndicators(ctx);
