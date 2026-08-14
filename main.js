@@ -42,13 +42,14 @@ const HUD_MARGIN = 50;
 
 let winner = null;
 let roundState = "playing"; // playing | ended | prompting
-let mode = "battle"; // "battle" | "setup"
+let mode = "battle"; // "battle" | "setup" | "twitchIdle" (see twitch.js — parked here between Channel Points redemptions)
 let selectA = null; // ROSTER index picked so far for the left slot, while in the setup screen
 let selectB = null; // ROSTER index picked so far for the right slot, while in the setup screen
 let endTimer = 0;
 let pendingBlob = null;
 let promptReady = false;
 let queuedDecision = null; // "keep" | "discard" | null — a Y/N pressed before the prompt was ready
+let twitchRoundActive = false; // true for the duration of a round started by triggerTwitchBattle() — see that function and the "ended" handling below
 
 let shakeMagnitude = 0;
 let shakeTimer = 0;
@@ -164,6 +165,32 @@ function keepRecording() {
 
 function discardRecording() {
   startRound();
+}
+
+// Called by twitch.js the instant a matching Channel Points redemption comes in. Only actually
+// does anything while genuinely idle (mode === "twitchIdle") — a redemption arriving mid-fight,
+// or while someone's mid-way through the manual setup screen, is just dropped rather than
+// interrupting whatever's already showing on stream.
+function triggerTwitchBattle() {
+  if (mode !== "twitchIdle") return;
+
+  gameMode = "1v1";
+  let a = Math.floor(Math.random() * ROSTER.length);
+  let b;
+  do { b = Math.floor(Math.random() * ROSTER.length); } while (b === a);
+  pickA = a;
+  pickB = b;
+
+  twitchRoundActive = true;
+  mode = "battle";
+  reset();
+  roundState = "playing";
+  endTimer = 0;
+  // Deliberately no startRecording() here — this is meant to run as an OBS Browser Source,
+  // which is already capturing the whole scene itself. The game's own separate clip-recording
+  // feature needs a Y/N keypress to resolve its keep/discard prompt, and nobody's sitting at the
+  // keyboard to give one mid-stream — see the twitchRoundActive branch below, which skips that
+  // prompt entirely and drops straight back into the waiting screen instead.
 }
 
 function pickRosterSlot(index) {
@@ -424,6 +451,10 @@ window.addEventListener("keydown", (e) => {
   }
 
   if (mode === "setup") return; // everything in setup is mouse-driven
+  // R/Y/N are meaningless while parked waiting for a Twitch redemption — there's no in-progress
+  // recording or fighters those keys are meant to act on. Tab still works (handled above,
+  // unconditionally) to drop into the normal setup screen and regain manual control.
+  if (mode === "twitchIdle") return;
 
   if (gameMode === "lab") {
     // The lab has no rounds to keep or discard — R just restarts the run.
@@ -815,6 +846,7 @@ function render(time) {
     if (gameMode === "1v1" && mode === "battle" && roundState === "prompting") drawPromptOverlay(c);
     if (gameMode === "vsboss" && mode === "battle" && vsBossState === "prompting") drawVsBossPromptOverlay(c);
     if (mode === "setup") drawSetupOverlay(c);
+    if (mode === "twitchIdle") drawTwitchIdleOverlay(c);
   }
 
   drawFrame(ctx);
@@ -829,13 +861,21 @@ function render(time) {
   if (gameMode === "1v1" && mode === "battle" && roundState === "ended") {
     endTimer += dt;
     if (endTimer >= ROUND_END_GRACE) {
-      roundState = "prompting";
-      stopRecording().then((blob) => {
-        pendingBlob = blob;
-        promptReady = true;
-        if (queuedDecision === "keep") keepRecording();
-        else if (queuedDecision === "discard") discardRecording();
-      });
+      if (twitchRoundActive) {
+        // No recording was ever started for this round (see triggerTwitchBattle), and there's
+        // nobody at the keyboard to answer a keep/discard prompt mid-stream — skip "prompting"
+        // entirely and drop straight back into the waiting screen for the next redemption.
+        twitchRoundActive = false;
+        mode = "twitchIdle";
+      } else {
+        roundState = "prompting";
+        stopRecording().then((blob) => {
+          pendingBlob = blob;
+          promptReady = true;
+          if (queuedDecision === "keep") keepRecording();
+          else if (queuedDecision === "discard") discardRecording();
+        });
+      }
     }
   }
 

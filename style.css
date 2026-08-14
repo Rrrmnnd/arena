@@ -41,3 +41,56 @@ html, body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+
+/* Twitch integration corner panel — plain HTML so it's independent of canvas scaling and stays
+   normal keyboard/mouse-accessible (important since this gets clicked once, inside OBS's
+   Browser Source "Interact" mode, to log in). See twitch.js. */
+#twitchPanel {
+  position: fixed;
+  left: 10px;
+  bottom: 10px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(145, 70, 255, 0.5);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: 12px Arial, sans-serif;
+  color: #ffffff;
+}
+
+#twitchPanel button {
+  background: #9146ff;
+  color: #ffffff;
+  border: none;
+  border-radius: 5px;
+  padding: 4px 10px;
+  font: bold 12px Arial, sans-serif;
+  cursor: pointer;
+}
+
+#twitchPanel button:hover {
+  background: #a970ff;
+}
+
+#twitchPanel .hidden {
+  display: none;
+}
+
+#twitchStatus {
+  color: rgba(255, 255, 255, 0.75);
+  max-width: 220px;
+}
+
+#twitchStatus.twitch-error {
+  color: #ff6464;
+}
+
+#twitchPanel input {
+  width: 130px;
+  font: 12px Arial, sans-serif;
+  padding: 2px 4px;
+}
