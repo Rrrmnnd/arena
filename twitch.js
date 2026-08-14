@@ -238,22 +238,19 @@ function initTwitchPanel() {
   }, TWITCH_REVALIDATE_INTERVAL_MS);
 }
 
-initTwitchPanel();
-
-// The idle screen between redemptions. Just status text — the actual login button / reward-name
-// input are plain HTML (see index.html), not canvas-drawn, so they stay simple, keyboard/mouse
-// accessible, and independent of whatever layout/scaling the game canvas itself is using.
-function drawTwitchIdleOverlay(ctx) {
-  ctx.fillStyle = "rgba(5,5,12,0.92)";
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#9146ff"; // Twitch's own brand purple
-  ctx.font = "bold 28px Arial";
-  ctx.fillText("Waiting for a Channel Points redemption…", WIDTH / 2, HEIGHT / 2 - 20);
-
-  ctx.fillStyle = "rgba(255,255,255,0.6)";
-  ctx.font = "18px Arial";
-  const reward = twitchRewardName();
-  ctx.fillText(reward ? `Reward: "${reward}"` : "No reward name configured yet — set one in the panel", WIDTH / 2, HEIGHT / 2 + 24);
+// The setup panel (login button, connection status, reward-name box) is only actually needed
+// while setting things up or checking on a problem — on the real stream output it should be
+// invisible, not a purple box sitting in the corner forever. Hidden by default; "T" toggles it
+// (ignored while actually typing into the reward-name box, so the letter still types normally).
+function toggleTwitchPanel() {
+  const panel = document.getElementById("twitchPanel");
+  if (panel) panel.classList.toggle("hidden");
 }
+
+window.addEventListener("keydown", (e) => {
+  if ((e.key === "t" || e.key === "T") && document.activeElement !== document.getElementById("twitchRewardInput")) {
+    toggleTwitchPanel();
+  }
+});
+
+initTwitchPanel();

@@ -656,6 +656,14 @@ function render(time) {
   const dt = Math.min((time - lastTime) / 1000, 0.05);
   lastTime = time;
 
+  // Keeps the page's own background in sync with `mode` every frame — cheap, and correct
+  // regardless of which of the several places mode can flip into/out of "twitchIdle" actually
+  // did it, rather than needing that toggle sprinkled at every one of those call sites. Paired
+  // with drawFrame()'s early-out for "twitchIdle" (clears the canvas instead of drawing anything)
+  // so an OBS Browser Source is genuinely transparent — showing the stream underneath — while
+  // idle, and only opaque while an actual battle is on screen. See style.css.
+  document.documentElement.classList.toggle("twitch-transparent", mode === "twitchIdle");
+
   // Hit-stop: hold the entire simulation — fighters, collisions, particles, the lot — perfectly
   // still for a few frames after a heavy blow, then let it all resume at once. Everything still
   // DRAWS every frame (the freeze has to be visible, not a dropped frame); only the advancing of
@@ -741,6 +749,15 @@ function render(time) {
   // on-screen canvas and, while recording, a second time (pre-scaled) onto the higher-res
   // recording canvas, so the saved video isn't just an upscaled blur of the 720x1280 display.
   function drawFrame(c) {
+    // Parked waiting for a Twitch redemption: draw nothing at all (not even the arena/HUD from
+    // whatever was last on screen) and leave the canvas genuinely transparent — see the
+    // html.twitch-transparent CSS rule this pairs with — so an OBS Browser Source shows straight
+    // through to the stream underneath until a redemption actually starts a battle.
+    if (mode === "twitchIdle") {
+      c.clearRect(0, 0, WIDTH, HEIGHT);
+      return;
+    }
+
     drawBackground(c);
 
     const combatants = gameMode === "1v1" ? [fighterA, fighterB] : (boss ? [boss, ...allies] : []);
@@ -846,7 +863,6 @@ function render(time) {
     if (gameMode === "1v1" && mode === "battle" && roundState === "prompting") drawPromptOverlay(c);
     if (gameMode === "vsboss" && mode === "battle" && vsBossState === "prompting") drawVsBossPromptOverlay(c);
     if (mode === "setup") drawSetupOverlay(c);
-    if (mode === "twitchIdle") drawTwitchIdleOverlay(c);
   }
 
   drawFrame(ctx);

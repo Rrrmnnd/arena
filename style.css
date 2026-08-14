@@ -9,8 +9,16 @@ html, body {
   overflow: hidden;
 }
 
+/* See main.js's render() — toggled every frame to match `mode`, so an OBS Browser Source shows
+   straight through to the stream underneath while parked waiting for a Twitch redemption. */
+html.twitch-transparent, html.twitch-transparent body {
+  background: transparent;
+}
+
 #game {
-  background: #0a0a14;
+  /* No background here on purpose — drawBackground() paints the whole canvas opaquely every
+     frame during actual play, so this would only ever show through during "twitchIdle" (see
+     main.js's drawFrame), where the point is exactly for nothing to be there. */
   max-width: 100vw;
   max-height: 100vh;
   width: auto;
@@ -76,7 +84,7 @@ html, body {
   background: #a970ff;
 }
 
-#twitchPanel .hidden {
+#twitchPanel.hidden, #twitchPanel .hidden {
   display: none;
 }
 

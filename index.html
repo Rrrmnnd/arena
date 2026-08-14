@@ -4,14 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Battle Arena</title>
-<link rel="stylesheet" href="style.css?v=187">
+<link rel="stylesheet" href="style.css?v=188">
 </head>
 <body>
 <canvas id="game" width="720" height="1280"></canvas>
 <div id="recIndicator" class="rec-indicator hidden">● REC</div>
 <!-- Plain HTML, not canvas-drawn — sits on top of the game as a fixed corner panel so it works
-     regardless of canvas scaling, and stays normal keyboard/mouse-accessible UI. See twitch.js. -->
-<div id="twitchPanel">
+     regardless of canvas scaling, and stays normal keyboard/mouse-accessible UI. See twitch.js.
+     Starts hidden — press T (in OBS: right-click the source -> Interact, then T) to reveal it for
+     setup/troubleshooting; it's not meant to be visible on the actual stream output. -->
+<div id="twitchPanel" class="hidden">
   <button id="twitchLoginBtn" type="button">Connect Twitch</button>
   <div id="twitchStatus">尚未連接</div>
   <label>Reward name: <input id="twitchRewardInput" type="text" placeholder="e.g. Random Battle"></label>
@@ -21,23 +23,23 @@
 <!-- ?v= is bumped by hand whenever any script below changes, so the browser can't serve a
      stale-cached file alongside fresh ones (a mix of old/new files across these tightly
      coupled scripts throws at runtime instead of just looking outdated). -->
-<script src="arena.js?v=187"></script>
-<script src="character.js?v=187"></script>
-<script src="sfx.js?v=187"></script>
-<script src="combat.js?v=187"></script>
-<script src="particles.js?v=187"></script>
-<script src="recorder.js?v=187"></script>
-<script src="giant.js?v=187"></script>
-<script src="punchman.js?v=187"></script>
-<script src="punchman2.js?v=187"></script>
-<script src="demon.js?v=187"></script>
-<script src="bomber.js?v=187"></script>
-<script src="gunner.js?v=187"></script>
-<script src="knight.js?v=187"></script>
-<script src="ninja.js?v=187"></script>
-<script src="virus.js?v=187"></script>
-<script src="lab.js?v=187"></script>
-<script src="twitch.js?v=187"></script>
-<script src="main.js?v=187"></script>
+<script src="arena.js?v=188"></script>
+<script src="character.js?v=188"></script>
+<script src="sfx.js?v=188"></script>
+<script src="combat.js?v=188"></script>
+<script src="particles.js?v=188"></script>
+<script src="recorder.js?v=188"></script>
+<script src="giant.js?v=188"></script>
+<script src="punchman.js?v=188"></script>
+<script src="punchman2.js?v=188"></script>
+<script src="demon.js?v=188"></script>
+<script src="bomber.js?v=188"></script>
+<script src="gunner.js?v=188"></script>
+<script src="knight.js?v=188"></script>
+<script src="ninja.js?v=188"></script>
+<script src="virus.js?v=188"></script>
+<script src="lab.js?v=188"></script>
+<script src="twitch.js?v=188"></script>
+<script src="main.js?v=188"></script>
 </body>
 </html>
