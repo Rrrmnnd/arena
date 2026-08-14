@@ -881,6 +881,9 @@ function render(time) {
         // No recording was ever started for this round (see triggerTwitchBattle), and there's
         // nobody at the keyboard to answer a keep/discard prompt mid-stream — skip "prompting"
         // entirely and drop straight back into the waiting screen for the next redemption.
+        // stopRecording() here is just defensive (isRecording should already be false) — see
+        // enterTwitchIdle() in twitch.js, which guards the other two ways into this mode.
+        if (isRecording) stopRecording();
         twitchRoundActive = false;
         mode = "twitchIdle";
       } else {

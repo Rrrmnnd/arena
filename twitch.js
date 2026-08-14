@@ -168,6 +168,18 @@ function reconnectTwitchSocket() {
   }, 2000);
 }
 
+// The normal ended->twitchIdle transition (in main.js) is already guaranteed clean, since a
+// Twitch-triggered round never calls startRecording() in the first place — but connecting (or
+// manually resuming via the panel's button) can happen at ANY moment, including mid-way through
+// whatever recorded manual round happened to be running (e.g. the default match that auto-starts
+// on page load). Without this, that recording is simply abandoned running in the background
+// forever: the REC indicator stays lit straight through what's supposed to be a fully invisible
+// idle state, and the MediaRecorder just keeps buffering chunks nobody will ever collect.
+function enterTwitchIdle() {
+  if (isRecording) stopRecording();
+  mode = "twitchIdle";
+}
+
 async function connectTwitch(token) {
   setTwitchStatus("驗證中…");
   const info = await validateTwitchToken(token).catch(() => null);
@@ -199,7 +211,7 @@ async function connectTwitch(token) {
   // Drops straight into the waiting screen — connecting is a deliberate one-time setup action
   // (done once inside the OBS Browser Source itself), so it's fine for it to take over from
   // whatever manual screen happened to be showing.
-  mode = "twitchIdle";
+  enterTwitchIdle();
 }
 
 function initTwitchPanel() {
@@ -246,7 +258,7 @@ function initTwitchPanel() {
   // time — redemptions just get silently dropped by triggerTwitchBattle's own mode check while
   // not actually idle. This is the manual way back in, since nothing else re-arms it on its own.
   const resumeBtn = document.getElementById("twitchResumeBtn");
-  if (resumeBtn) resumeBtn.addEventListener("click", () => { mode = "twitchIdle"; });
+  if (resumeBtn) resumeBtn.addEventListener("click", enterTwitchIdle);
   setInterval(() => {
     if (resumeBtn) resumeBtn.classList.toggle("hidden", !twitchToken || mode === "twitchIdle");
   }, 500);
