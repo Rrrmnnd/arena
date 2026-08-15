@@ -11,14 +11,23 @@
 
 const FIREMAGE_MAX_HP = 100;  // no melee of its own at all right now, purely zone control
 const FIREMAGE_SPEED   = 240;
-const FIREMAGE_SIZE    = CHAR_BASE_SIZE * 0.85; // a bit smaller than Punch Man — a compact orb, see drawBody
+const FIREMAGE_SIZE    = CHAR_BASE_SIZE; // same as Punch Man/Giant/Soldier
 
 const FIREMAGE_FIREBALL_DAMAGE   = 8;
 const FIREMAGE_FIREBALL_COOLDOWN = 3.0;
 const FIREMAGE_FIREBALL_SPEED    = 480;
 const FIREMAGE_FIREBALL_LIFE     = 2.5; // safety timeout in case it somehow never reaches a wall
 const FIREMAGE_FIREBALL_RADIUS   = 8;   // the visual head's own radius — see updateFireballs, which stops it AT the wall's inner face rather than letting it punch through
-const FIREMAGE_CAST_FLASH_TIME   = 0.3; // seconds the staff head flares brighter right after releasing a fireball
+
+// Casting is a three-beat swing rather than an instant spawn: the staff winds back, whips
+// forward to point straight at the target — and the fireball is released at exactly that peak,
+// not when the cast started, so the shot visibly comes off the end of the swing — then eases
+// back to its resting position. See castSwingAmount/castFlash and update()'s cast state machine.
+// The three together are well under FIREMAGE_FIREBALL_COOLDOWN, so a cast always finishes its
+// animation long before the next one is allowed to begin.
+const FIREMAGE_CAST_WINDUP  = 0.20;
+const FIREMAGE_CAST_SWING   = 0.12;
+const FIREMAGE_CAST_RECOVER = 0.38;
 
 // The actual point of the character: wherever a fireball ends up — the opponent's own current
 // position if it hit them, or the wall it struck otherwise — a patch of ground catches fire and
@@ -26,7 +35,7 @@ const FIREMAGE_CAST_FLASH_TIME   = 0.3; // seconds the staff head flares brighte
 // immune to its own lava, unlike the first pass of this) — same 5/sec overall rate as before,
 // just ticked in smaller, more frequent steps (1 dmg every 0.2s) so standing in it a moment
 // doesn't feel like an all-or-nothing single big hit.
-const FIREMAGE_LAVA_DURATION      = 10.0;
+const FIREMAGE_LAVA_DURATION      = 13.0;
 const FIREMAGE_LAVA_TICK_DAMAGE   = 1;
 const FIREMAGE_LAVA_TICK_INTERVAL = 0.2;
 const FIREMAGE_LAVA_RADIUS        = 50; // roughly a full body-width bigger than a character, so standing near the middle reliably counts
@@ -76,12 +85,12 @@ class FireMage extends Character {
     this.fireballTimer = 0;
     this.fireballs = [];
     this.lavaPatches = [];
-    this.castFlashTimer = 0; // >0 right after a cast: the staff head flares — see drawStaff
+    this.castPhase = null; // null | "windup" | "swing" | "recover" — see update()
+    this.castTimer = 0;
 
-    // Fixed per-instance layout so the crust cracks and rising embers don't reroll (and visibly
+    // Fixed per-instance layout so the trim runes and rising embers don't reroll (and visibly
     // crawl) every single frame.
     this.bodySeed = Math.random() * Math.PI * 2;
-    this.moltenCracks = this.generateMoltenCracks();
     this.embers = Array.from({ length: 6 }, () => ({
       angle: Math.random() * Math.PI * 2,
       dist: 0.3 + Math.random() * 0.45,
@@ -91,32 +100,38 @@ class FireMage extends Character {
     }));
   }
 
-  // Jagged seams of exposed lava running outward across the crust, in UNIT-CIRCLE space
-  // (roughly -1..1; drawBody scales by the actual radius). Each starts near the middle and
-  // walks outward with a drifting heading, so they fork out across the surface rather than
-  // sitting as tidy radial spokes.
-  generateMoltenCracks() {
-    const cracks = [];
-    const count = 5 + Math.floor(Math.random() * 3);
-    for (let i = 0; i < count; i++) {
-      let a = (i / count) * Math.PI * 2 + Math.random() * 0.6;
-      let d = 0.12;
-      const pts = [{ x: Math.cos(a) * d, y: Math.sin(a) * d }];
-      const steps = 3 + Math.floor(Math.random() * 3);
-      for (let s = 0; s < steps; s++) {
-        a += (Math.random() - 0.5) * 0.85;
-        d += 0.15 + Math.random() * 0.13;
-        pts.push({ x: Math.cos(a) * d, y: Math.sin(a) * d });
-      }
-      cracks.push({ pts, seed: Math.random() * Math.PI * 2, width: 0.045 + Math.random() * 0.035 });
+  // 0 at rest, negative while wound back, up to 1 at the peak of the forward swing. drawStaff
+  // reads this to blend the staff between "held upright at the mage's side" and "thrust out
+  // pointing straight at the target", so the whole motion falls out of this single number.
+  get castSwingAmount() {
+    if (!this.castPhase) return 0;
+    if (this.castPhase === "windup") {
+      const p = 1 - this.castTimer / FIREMAGE_CAST_WINDUP;
+      return -0.32 * (p * p * (3 - 2 * p)); // smoothstep back
     }
-    return cracks;
+    if (this.castPhase === "swing") {
+      const p = 1 - this.castTimer / FIREMAGE_CAST_SWING;
+      return -0.32 + 1.32 * (1 - (1 - p) * (1 - p)); // ease-out: fastest at the start of the whip
+    }
+    const p = 1 - this.castTimer / FIREMAGE_CAST_RECOVER;
+    return 1 - (p * p * (3 - 2 * p)); // smoothstep back to rest
   }
 
-  throwFireball(opponent) {
+  // Staff-head brightness: builds through the forward swing, peaks exactly at release, decays
+  // over the recovery.
+  get castFlash() {
+    if (this.castPhase === "swing") return 1 - this.castTimer / FIREMAGE_CAST_SWING;
+    if (this.castPhase === "recover") return Math.max(0, this.castTimer / FIREMAGE_CAST_RECOVER);
+    return 0;
+  }
+
+  // Called at the peak of the swing (not when the cast began) — see update(). The opponent can
+  // die or vanish mid-animation, in which case the swing still plays out, it just produces
+  // nothing.
+  releaseFireball(opponent) {
+    if (!opponent || !opponent.alive) return;
     const angle = Math.atan2(opponent.y - this.y, opponent.x - this.x);
     const spawnDist = this.size / 2 + 8;
-    this.castFlashTimer = FIREMAGE_CAST_FLASH_TIME;
     this.fireballs.push(new Fireball(
       this.x + Math.cos(angle) * spawnDist, this.y + Math.sin(angle) * spawnDist,
       angle, FIREMAGE_FIREBALL_SPEED
@@ -223,15 +238,33 @@ class FireMage extends Character {
     }
 
     super.update(dt, opponent);
-    if (this.castFlashTimer > 0) this.castFlashTimer -= dt;
     this.updateFireballs(dt, opponent);
+
+    // Cast animation runs to completion on its own once started — deliberately NOT gated on
+    // stunTimer below, so getting hit mid-swing doesn't strand the staff frozen halfway out.
+    if (this.castPhase) {
+      this.castTimer -= dt;
+      if (this.castTimer <= 0) {
+        if (this.castPhase === "windup") {
+          this.castPhase = "swing";
+          this.castTimer = FIREMAGE_CAST_SWING;
+        } else if (this.castPhase === "swing") {
+          this.releaseFireball(opponent); // the shot leaves the staff at the peak of the swing
+          this.castPhase = "recover";
+          this.castTimer = FIREMAGE_CAST_RECOVER;
+        } else {
+          this.castPhase = null;
+        }
+      }
+    }
 
     if (this.stunTimer > 0) return;
 
     if (this.fireballTimer > 0) this.fireballTimer -= dt;
-    if (opponent && opponent.alive && this.fireballTimer <= 0 && this.canAttack) {
+    if (opponent && opponent.alive && this.fireballTimer <= 0 && this.canAttack && !this.castPhase) {
       this.fireballTimer += FIREMAGE_FIREBALL_COOLDOWN;
-      this.throwFireball(opponent);
+      this.castPhase = "windup";
+      this.castTimer = FIREMAGE_CAST_WINDUP;
     }
   }
 
@@ -342,76 +375,88 @@ class FireMage extends Character {
     }
   }
 
-  // The staff, floating alongside the orb on whichever side the opponent is on — a tapered dark
-  // shaft with metal bindings, a set of prongs cradling a burning gem at the head, and a soft
-  // light it casts on its surroundings. Drawn BEFORE the body so the orb overlaps the shaft's
-  // lower end and it reads as carried rather than pasted alongside. Kept near-upright with only
-  // a lean toward the target rather than rotating fully to face it: a staff swinging around to
-  // point straight down whenever the opponent is below reads as broken, not as aiming.
+  // The staff. Its whole motion comes off castSwingAmount: at rest (0) it's held upright at the
+  // mage's side, at the peak of a cast (1) it's thrust out pointing straight along facingAngle,
+  // and a small negative value winds it back the other way first. Interpolating the ROTATION
+  // between those two poses (rather than, say, sliding it around) is what gives the swing its
+  // arc. Drawn after the body so it passes in front while swinging across.
   drawStaff(ctx, r, t) {
+    const swing = this.castSwingAmount;
+    const flash = this.castFlash;
     const side = Math.cos(this.facingAngle) >= 0 ? 1 : -1;
-    const lean = side * 0.16; // radians off vertical, tipping the head toward the target
-    const bob = Math.sin(t * 1.7 + this.bodySeed) * r * 0.05;
-    const flash = Math.max(0, this.castFlashTimer / FIREMAGE_CAST_FLASH_TIME);
+
+    // Rest pose: near-vertical, leaning slightly toward the target. Aim pose: straight along
+    // facingAngle. The difference is normalised into [-PI, PI] so the blend always takes the
+    // short way round instead of occasionally whipping the long way about.
+    const restRot = -Math.PI / 2 + side * 0.18;
+    let delta = this.facingAngle - restRot;
+    delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+    const rot = restRot + delta * swing;
+
+    // The grip sits at the mage's side and pushes a little way toward the target through the
+    // swing, so the thrust reads as coming from the body rather than the staff merely spinning.
+    const gripX = side * r * 0.5 + Math.cos(this.facingAngle) * r * 0.35 * Math.max(0, swing);
+    const gripY = r * 0.2 + Math.sin(this.facingAngle) * r * 0.35 * Math.max(0, swing)
+      + Math.sin(t * 1.7 + this.bodySeed) * r * 0.04;
 
     ctx.save();
-    ctx.translate(side * r * 0.92, bob);
-    ctx.rotate(lean);
+    ctx.translate(gripX, gripY);
+    ctx.rotate(rot + Math.PI / 2); // +90° so the shaft's local -Y (its length) lies along `rot`
 
-    const topY = -r * 1.5;
-    const botY = r * 1.05;
+    const topY = -r * 1.35;
+    const botY = r * 0.5;
 
-    // Shaft — tapered (thicker at the grip, thinner toward the head) with a lit edge down one
-    // side so it reads as a round pole rather than a flat stick.
-    const shaftW = r * 0.115;
+    // Shaft — tapered, with a lit edge down one side so it reads as a round pole not a flat stick
+    const shaftW = r * 0.1;
     ctx.beginPath();
-    ctx.moveTo(-shaftW * 0.78, topY);
-    ctx.lineTo(shaftW * 0.78, topY);
+    ctx.moveTo(-shaftW * 0.75, topY);
+    ctx.lineTo(shaftW * 0.75, topY);
     ctx.lineTo(shaftW, botY);
     ctx.lineTo(-shaftW, botY);
     ctx.closePath();
     const shaftGrad = ctx.createLinearGradient(-shaftW, 0, shaftW, 0);
     shaftGrad.addColorStop(0, "#1c0f08");
-    shaftGrad.addColorStop(0.38, "#57331c");
-    shaftGrad.addColorStop(0.62, "#3a2011");
+    shaftGrad.addColorStop(0.38, "#6b4023");
+    shaftGrad.addColorStop(0.62, "#452614");
     shaftGrad.addColorStop(1, "#140a05");
     ctx.fillStyle = shaftGrad;
     ctx.fill();
 
     // Metal bindings
-    for (const by of [topY + r * 0.3, botY - r * 0.42]) {
+    for (const by of [topY + r * 0.26, botY - r * 0.2]) {
       const bandW = shaftW * 1.5;
       const bandGrad = ctx.createLinearGradient(-bandW, 0, bandW, 0);
       bandGrad.addColorStop(0, "#3a3128");
-      bandGrad.addColorStop(0.4, "#9a8b6c");
+      bandGrad.addColorStop(0.4, "#b9a578");
       bandGrad.addColorStop(1, "#2a231c");
       ctx.fillStyle = bandGrad;
-      ctx.fillRect(-bandW, by, bandW * 2, r * 0.11);
+      ctx.fillRect(-bandW, by, bandW * 2, r * 0.1);
     }
 
     // Prongs cradling the gem
-    ctx.strokeStyle = "#4a3a2a";
-    ctx.lineWidth = r * 0.07;
+    ctx.strokeStyle = "#5c4830";
+    ctx.lineWidth = r * 0.062;
     ctx.lineCap = "round";
     for (const px of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(px * shaftW * 0.7, topY + r * 0.06);
-      ctx.quadraticCurveTo(px * r * 0.34, topY - r * 0.05, px * r * 0.2, topY - r * 0.34);
+      ctx.moveTo(px * shaftW * 0.7, topY + r * 0.05);
+      ctx.quadraticCurveTo(px * r * 0.3, topY - r * 0.04, px * r * 0.17, topY - r * 0.3);
       ctx.stroke();
     }
 
-    // Burning gem at the head — flickers constantly, flares on a cast
-    const gemR = r * 0.27 * (1 + Math.sin(t * 9 + this.bodySeed) * 0.06 + flash * 0.35);
-    const gemY = topY - r * 0.24;
+    // Burning gem at the head — flickers constantly, flares hard at the moment of release
+    const gemR = r * 0.24 * (1 + Math.sin(t * 9 + this.bodySeed) * 0.06 + flash * 0.4);
+    const gemY = topY - r * 0.22;
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    const halo = ctx.createRadialGradient(0, gemY, 0, 0, gemY, gemR * (3.2 + flash * 2.2));
-    halo.addColorStop(0, `rgba(255,190,90,${(0.5 + flash * 0.4).toFixed(3)})`);
-    halo.addColorStop(0.45, `rgba(255,110,20,${(0.18 + flash * 0.25).toFixed(3)})`);
+    const haloR = gemR * (3.0 + flash * 2.6);
+    const halo = ctx.createRadialGradient(0, gemY, 0, 0, gemY, haloR);
+    halo.addColorStop(0, `rgba(255,196,100,${(0.55 + flash * 0.4).toFixed(3)})`);
+    halo.addColorStop(0.45, `rgba(255,110,20,${(0.2 + flash * 0.3).toFixed(3)})`);
     halo.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(0, gemY, gemR * (3.2 + flash * 2.2), 0, Math.PI * 2);
+    ctx.arc(0, gemY, haloR, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
@@ -428,120 +473,185 @@ class FireMage extends Character {
     ctx.restore();
   }
 
-  // A molten orb: a dark cooled crust with lava glowing up through jagged seams, lit from the
-  // upper left with a rim-light bounce along the lower right so it reads as a genuine sphere
-  // rather than a flat disc, plus embers drifting up off it. Paired with the staff (drawn first,
-  // see drawStaff) — the whole character is just those two things.
+  // A round hooded caster: the circular body IS the robe, with a peaked hood over the top, a
+  // shadowed face cavity holding two ember eyes, a shoulder mantle, a gold clasp and a band of
+  // glowing runes around the hem. The circle keeps it consistent with the rest of the cast while
+  // the hood/eyes/mantle are what make it read as a person rather than a ball, and the whole
+  // palette (ember gradient, glowing runes, drifting sparks) carries the fire element.
   drawBody(ctx) {
     const r = this.size / 2;
     const t = performance.now() / 1000;
-    const breathe = 1 + Math.sin(t * 1.4 + this.bodySeed) * 0.022;
+    const breathe = 1 + Math.sin(t * 1.4 + this.bodySeed) * 0.02;
+    const flash = this.castFlash;
+    const side = Math.cos(this.facingAngle) >= 0 ? 1 : -1; // which way it's facing; the hood tip trails the opposite way
 
     ctx.save();
     ctx.translate(this.x, this.y);
-
-    this.drawStaff(ctx, r, t);
-
     ctx.scale(breathe, breathe);
 
-    // Contact shadow, so the orb sits in the arena rather than floating over it
+    // Contact shadow, so it sits in the arena rather than floating over it
     ctx.save();
-    ctx.globalAlpha = 0.32;
+    ctx.globalAlpha = 0.3;
     ctx.fillStyle = "#000000";
     ctx.beginPath();
-    ctx.ellipse(r * 0.12, r * 0.92, r * 0.78, r * 0.22, 0, 0, Math.PI * 2);
+    ctx.ellipse(r * 0.1, r * 0.93, r * 0.72, r * 0.2, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
-    // Crust
-    // Kept a good deal brighter than a literal cooled crust would be: at the size this actually
-    // renders in-game (~50px across) a realistically dark rock just reads as a muddy blob next
-    // to the rest of the cast, so the mid-tones are pushed up until the sphere still reads at a
-    // glance while the darkest rim keeps the round shading.
-    const bodyGrad = ctx.createRadialGradient(-r * 0.33, -r * 0.38, r * 0.06, 0, 0, r);
-    bodyGrad.addColorStop(0, "#d97a34");
-    bodyGrad.addColorStop(0.4, "#a04516");
-    bodyGrad.addColorStop(0.78, "#5c220a");
-    bodyGrad.addColorStop(1, "#2a1004");
-    ctx.fillStyle = bodyGrad;
+    // Robe — the body circle. Lit from the upper left, deepening to near-black at the hem.
+    const robeGrad = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.06, 0, 0, r);
+    robeGrad.addColorStop(0, "#c9552a");
+    robeGrad.addColorStop(0.45, "#8e2f13");
+    robeGrad.addColorStop(0.8, "#4e1607");
+    robeGrad.addColorStop(1, "#260a03");
+    ctx.fillStyle = robeGrad;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.fill();
 
-    // Molten seams, clipped to the sphere so they never spill past its edge
+    // Everything painted onto the robe is clipped to it, so no detail spills past the silhouette
     ctx.save();
     ctx.beginPath();
-    ctx.arc(0, 0, r * 0.99, 0, Math.PI * 2);
+    ctx.arc(0, 0, r * 0.995, 0, Math.PI * 2);
     ctx.clip();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.lineCap = "round";
-    for (const c of this.moltenCracks) {
-      const pulse = 0.55 + Math.sin(t * 2.2 + c.seed) * 0.45;
-      // Wide dim under-glow first, then the hot thin core on top — the two passes together are
-      // what make a seam look like light escaping from inside rather than a painted-on line.
-      ctx.strokeStyle = `rgba(255,96,10,${(0.3 * pulse).toFixed(3)})`;
-      ctx.lineWidth = c.width * r * 2.6;
-      ctx.beginPath();
-      c.pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x * r, p.y * r) : ctx.lineTo(p.x * r, p.y * r)));
-      ctx.stroke();
 
-      ctx.strokeStyle = `rgba(255,214,140,${(0.85 * pulse).toFixed(3)})`;
-      ctx.lineWidth = Math.max(0.7, c.width * r);
+    // Robe folds — a few soft vertical creases fanning out from under the mantle
+    ctx.strokeStyle = "rgba(40,10,2,0.4)";
+    ctx.lineCap = "round";
+    for (let i = -2; i <= 2; i++) {
+      ctx.lineWidth = r * 0.05;
       ctx.beginPath();
-      c.pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x * r, p.y * r) : ctx.lineTo(p.x * r, p.y * r)));
+      ctx.moveTo(i * r * 0.24, r * 0.18);
+      ctx.quadraticCurveTo(i * r * 0.3, r * 0.6, i * r * 0.36, r * 1.05);
       ctx.stroke();
     }
 
-    // Molten core bleeding through the middle
-    const corePulse = 0.5 + Math.sin(t * 2.6 + this.bodySeed) * 0.3;
-    const core = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 0.62);
-    core.addColorStop(0, `rgba(255,186,80,${(0.6 * corePulse).toFixed(3)})`);
-    core.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = core;
+    // Hem band with glowing runes — the "professional mage" trim
     ctx.beginPath();
-    ctx.arc(0, 0, r * 0.55, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Rim light along the shadow side — the single cheapest cue that this is a sphere
+    ctx.arc(0, 0, r * 0.86, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(28,8,2,0.75)";
+    ctx.lineWidth = r * 0.19;
+    ctx.stroke();
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    ctx.strokeStyle = "rgba(255,130,45,0.5)";
-    ctx.lineWidth = r * 0.09;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.95, Math.PI * 0.05, Math.PI * 0.85);
-    ctx.stroke();
+    for (let i = 0; i < 7; i++) {
+      const a = Math.PI * 0.16 + (i / 6) * Math.PI * 0.68; // spread across the lower arc only
+      const pulse = 0.45 + Math.sin(t * 2.4 + i * 1.1 + this.bodySeed) * 0.35 + flash * 0.4;
+      ctx.globalAlpha = Math.max(0, Math.min(1, pulse));
+      ctx.fillStyle = "#ffb23c";
+      ctx.beginPath();
+      ctx.ellipse(Math.cos(a) * r * 0.86, Math.sin(a) * r * 0.86, r * 0.035, r * 0.075, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
 
-    // Specular highlight
-    ctx.save();
-    ctx.globalAlpha = 0.3;
-    ctx.fillStyle = "#ffd9a8";
+    // Shoulder mantle draped over the upper body
     ctx.beginPath();
-    ctx.ellipse(-r * 0.36, -r * 0.42, r * 0.2, r * 0.13, -0.7, 0, Math.PI * 2);
+    ctx.moveTo(-r * 0.99, -r * 0.05);
+    ctx.quadraticCurveTo(-r * 0.6, r * 0.42, 0, r * 0.36);
+    ctx.quadraticCurveTo(r * 0.6, r * 0.42, r * 0.99, -r * 0.05);
+    ctx.quadraticCurveTo(r * 0.5, -r * 0.52, 0, -r * 0.5);
+    ctx.quadraticCurveTo(-r * 0.5, -r * 0.52, -r * 0.99, -r * 0.05);
+    ctx.closePath();
+    const mantleGrad = ctx.createLinearGradient(0, -r * 0.5, 0, r * 0.4);
+    mantleGrad.addColorStop(0, "#8e3a18");
+    mantleGrad.addColorStop(1, "#43140699");
+    ctx.fillStyle = mantleGrad;
+    ctx.fill();
+
+    ctx.restore(); // end robe clip
+
+    // Hood — a proper pointed wizard's cowl rather than a dome, its tip drawn up and tilted back
+    // away from whichever way the mage is facing. Kept under ~1.25r tall so the peak still clears
+    // the floating HP bar that sits at size/2 + 22 above the character.
+    const back = -side * r * 0.3; // tip trails behind the facing direction
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.74, -r * 0.18);
+    ctx.quadraticCurveTo(-r * 0.86, -r * 0.82, back - r * 0.12, -r * 1.03);
+    ctx.quadraticCurveTo(back + r * 0.02, -r * 1.28, back + r * 0.2, -r * 1.24); // the tip itself
+    ctx.quadraticCurveTo(r * 0.3, -r * 1.0, r * 0.68, -r * 0.66);
+    ctx.quadraticCurveTo(r * 0.84, -r * 0.42, r * 0.74, -r * 0.18);
+    ctx.quadraticCurveTo(0, -r * 0.02, -r * 0.74, -r * 0.18);
+    ctx.closePath();
+    const hoodGrad = ctx.createLinearGradient(-r * 0.5, -r * 1.1, r * 0.5, -r * 0.1);
+    hoodGrad.addColorStop(0, "#b84a1e");
+    hoodGrad.addColorStop(0.55, "#6a2410");
+    hoodGrad.addColorStop(1, "#280b03");
+    ctx.fillStyle = hoodGrad;
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.55)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Face cavity — deep shadow under the hood, narrower than the hood itself so a clear rim of
+    // cowl reads all the way around the opening
+    ctx.beginPath();
+    ctx.ellipse(0, -r * 0.44, r * 0.42, r * 0.32, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "#100309";
+    ctx.fill();
+
+    // Ember eyes — the single strongest "this is a person" cue on the whole design
+    const eyePulse = 0.75 + Math.sin(t * 3.1 + this.bodySeed) * 0.25 + flash * 0.5;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = Math.max(0, Math.min(1, eyePulse));
+    for (const ex of [-r * 0.19, r * 0.19]) {
+      const eyeGlow = ctx.createRadialGradient(ex, -r * 0.44, 0, ex, -r * 0.44, r * 0.2);
+      eyeGlow.addColorStop(0, "#fff0c0");
+      eyeGlow.addColorStop(0.35, "#ffa023");
+      eyeGlow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = eyeGlow;
+      ctx.beginPath();
+      ctx.arc(ex, -r * 0.44, r * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff6dc";
+      ctx.beginPath();
+      ctx.ellipse(ex, -r * 0.44, r * 0.055, r * 0.085, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Gold clasp holding the mantle at the throat
+    const claspY = -r * 0.03;
+    const claspGrad = ctx.createLinearGradient(0, claspY - r * 0.1, 0, claspY + r * 0.1);
+    claspGrad.addColorStop(0, "#ffdf9a");
+    claspGrad.addColorStop(1, "#8a6216");
+    ctx.fillStyle = claspGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, claspY, r * 0.13, r * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.5 + Math.sin(t * 2.8) * 0.2;
+    ctx.fillStyle = "#ff8c2a";
+    ctx.beginPath();
+    ctx.arc(0, claspY, r * 0.055, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
-    ctx.strokeStyle = "rgba(0,0,0,0.55)";
+    // Outline, tying the hood and robe together as one silhouette
+    ctx.strokeStyle = "rgba(0,0,0,0.5)";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Embers drifting up off the crust, looping back to the bottom as they fade out
+    // Embers drifting up off the robe, looping back down as they fade
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     for (const e of this.embers) {
       const cycle = ((t * e.speed + e.seed) % 2) / 2; // 0..1
       const ex = Math.cos(e.angle) * r * e.dist + Math.sin(t * 2 + e.seed) * r * 0.1;
-      const ey = r * 0.5 - cycle * r * 1.9;
-      ctx.globalAlpha = Math.max(0, Math.sin(cycle * Math.PI)) * 0.85;
+      const ey = r * 0.6 - cycle * r * 2.0;
+      ctx.globalAlpha = Math.max(0, Math.sin(cycle * Math.PI)) * 0.8;
       ctx.fillStyle = cycle > 0.55 ? "#ff7a20" : "#ffcf6b";
       ctx.beginPath();
       ctx.arc(ex, ey, r * e.size * (1 - cycle * 0.45), 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
+
+    this.drawStaff(ctx, r, t);
 
     ctx.restore();
   }
