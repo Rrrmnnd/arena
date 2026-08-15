@@ -17,7 +17,11 @@ const FIREMAGE_FIREBALL_DAMAGE   = 8;
 const FIREMAGE_FIREBALL_COOLDOWN = 3.0;
 const FIREMAGE_FIREBALL_SPEED    = 480;
 const FIREMAGE_FIREBALL_LIFE     = 2.5; // safety timeout in case it somehow never reaches a wall
-const FIREMAGE_FIREBALL_RADIUS   = 8;   // the visual head's own radius — see updateFireballs, which stops it AT the wall's inner face rather than letting it punch through
+// The launched fireball's radius — deliberately a touch wider than the mage itself (33 -> 66px
+// across vs. the body's 60), since the whole cooldown is spent visibly charging it up to this
+// size at the staff head. Note this also IS its hitbox (see updateFireballs), so a fully-charged
+// shot is much harder to slip past than the small bolt this used to fire.
+const FIREMAGE_FIREBALL_RADIUS   = 33;
 
 // Casting is a three-beat swing rather than an instant spawn: the staff winds back, whips
 // forward to point straight at the target — and the fireball is released at exactly that peak,
@@ -125,17 +129,35 @@ class FireMage extends Character {
     return 0;
   }
 
+  // 0..1 — how far along the next shot is from being ready, which drawStaff renders as an orb
+  // physically growing at the staff head over the whole cooldown, so the wait reads as visibly
+  // gathering power rather than as dead time.
+  //
+  // Held pinned at 1 through the windup and the swing itself: fireballTimer is reset the instant
+  // a cast BEGINS, so without this the fully-charged orb would snap back to nothing at the very
+  // moment the mage starts winding up to throw it. It's only once the shot has actually left
+  // (recover onward) that the charge legitimately reads as spent and starts over.
+  get chargeRatio() {
+    if (this.castPhase === "windup" || this.castPhase === "swing") return 1;
+    return Math.max(0, Math.min(1, 1 - this.fireballTimer / FIREMAGE_FIREBALL_COOLDOWN));
+  }
+
   // Called at the peak of the swing (not when the cast began) — see update(). The opponent can
   // die or vanish mid-animation, in which case the swing still plays out, it just produces
   // nothing.
   releaseFireball(opponent) {
     if (!opponent || !opponent.alive) return;
     const angle = Math.atan2(opponent.y - this.y, opponent.x - this.x);
-    const spawnDist = this.size / 2 + 8;
+    // Clear of the mage's own body, so a ball this size doesn't spawn half-buried in it
+    const spawnDist = this.size / 2 + FIREMAGE_FIREBALL_RADIUS * 0.85;
     this.fireballs.push(new Fireball(
       this.x + Math.cos(angle) * spawnDist, this.y + Math.sin(angle) * spawnDist,
       angle, FIREMAGE_FIREBALL_SPEED
     ));
+    spawnImpactParticles(
+      this.x + Math.cos(angle) * spawnDist, this.y + Math.sin(angle) * spawnDist,
+      ["#ffcf40", "#ff6a20"], 14, 1.1, 0
+    );
   }
 
   spawnLava(x, y) {
@@ -161,7 +183,8 @@ class FireMage extends Character {
 
       if (opponent && opponent.alive) {
         const dist = Math.hypot(opponent.x - f.x, opponent.y - f.y);
-        if (dist <= opponent.size / 2 + 8) {
+        // Matched to the ball's actual drawn size, so what looks like a hit is a hit
+        if (dist <= opponent.size / 2 + FIREMAGE_FIREBALL_RADIUS) {
           opponent.takeDamage(FIREMAGE_FIREBALL_DAMAGE);
           landX = opponent.x;
           landY = opponent.y;
@@ -338,38 +361,82 @@ class FireMage extends Character {
     ctx.restore(); // end arena clip
   }
 
+  // The launched ball. Big enough now (see FIREMAGE_FIREBALL_RADIUS) that a single flat blob
+  // would look cheap, so it's built in layers: an outer glow, a churning flame silhouette whose
+  // rim wobbles on several out-of-phase waves, a white-hot core, and a trail of shed embers
+  // streaming out behind it.
   drawFireballsInFlight(ctx) {
     const t = performance.now() / 1000;
+    const R = FIREMAGE_FIREBALL_RADIUS;
     for (const f of this.fireballs) {
       ctx.save();
       ctx.translate(f.x, f.y);
       ctx.rotate(f.angle);
 
-      const flicker = 1 + Math.sin(t * 20 + f.seed) * 0.08;
-      const headR = 7 * flicker;
-      const tailLen = 20;
-
+      // Outer heat glow
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const glow = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R * 1.7);
+      glow.addColorStop(0, "rgba(255,150,40,0.55)");
+      glow.addColorStop(0.5, "rgba(255,90,10,0.22)");
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.moveTo(headR, 0);
-      const wob1 = Math.sin(t * 16 + f.seed) * 2;
-      const wob2 = Math.sin(t * 16 + f.seed + 2.4) * 2;
-      ctx.quadraticCurveTo(0, -headR + wob1, -tailLen * 0.6, -1.5 + wob1 * 0.5);
-      ctx.quadraticCurveTo(-tailLen, 0, -tailLen * 0.6, 1.5 + wob2 * 0.5);
-      ctx.quadraticCurveTo(0, headR + wob2, headR, 0);
+      ctx.arc(0, 0, R * 1.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Trailing embers shed behind the ball
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = 0; i < 5; i++) {
+        const p = ((t * 2.2 + f.seed + i * 0.37) % 1);
+        const tx = -R * (0.7 + p * 1.9);
+        const ty = Math.sin(t * 7 + i * 2.1 + f.seed) * R * 0.4 * p;
+        ctx.globalAlpha = (1 - p) * 0.7;
+        ctx.fillStyle = p > 0.5 ? "#ff6a18" : "#ffcf5c";
+        ctx.beginPath();
+        ctx.arc(tx, ty, R * 0.2 * (1 - p * 0.7), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Churning flame body — a ring of points each riding its own wave, so the outline boils
+      // rather than staying a clean circle
+      ctx.beginPath();
+      const pts = 20;
+      for (let i = 0; i <= pts; i++) {
+        const a = (i / pts) * Math.PI * 2;
+        const wob = 1
+          + Math.sin(a * 3 + t * 9 + f.seed) * 0.11
+          + Math.sin(a * 5 - t * 13 + f.seed * 1.7) * 0.07;
+        // Stretched slightly along the direction of travel, squashed across it
+        const rad = R * wob;
+        const px = Math.cos(a) * rad * 1.1, py = Math.sin(a) * rad * 0.92;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
       ctx.closePath();
-      const grad = ctx.createRadialGradient(headR * 0.3, 0, 1, headR * 0.3, 0, headR * 1.6);
-      grad.addColorStop(0, "#fff3c0");
-      grad.addColorStop(0.4, "#ffb020");
-      grad.addColorStop(1, "#c02a00");
+      const grad = ctx.createRadialGradient(R * 0.22, -R * 0.12, R * 0.06, 0, 0, R * 1.15);
+      grad.addColorStop(0, "#fffbe0");
+      grad.addColorStop(0.28, "#ffdc5c");
+      grad.addColorStop(0.6, "#ff8a14");
+      grad.addColorStop(1, "#c22e02");
       ctx.fillStyle = grad;
       ctx.fill();
 
+      // White-hot core
+      ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = 0.7;
-      ctx.fillStyle = "#ffe08c";
+      ctx.globalAlpha = 0.65 + Math.sin(t * 14 + f.seed) * 0.2;
+      const core = ctx.createRadialGradient(R * 0.18, -R * 0.1, 0, R * 0.18, -R * 0.1, R * 0.55);
+      core.addColorStop(0, "#ffffff");
+      core.addColorStop(0.5, "rgba(255,214,120,0.5)");
+      core.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = core;
       ctx.beginPath();
-      ctx.arc(headR * 0.3, 0, headR * 0.5, 0, Math.PI * 2);
+      ctx.arc(R * 0.18, -R * 0.1, R * 0.55, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
 
       ctx.restore();
     }
@@ -415,10 +482,10 @@ class FireMage extends Character {
     ctx.lineTo(-shaftW, botY);
     ctx.closePath();
     const shaftGrad = ctx.createLinearGradient(-shaftW, 0, shaftW, 0);
-    shaftGrad.addColorStop(0, "#1c0f08");
-    shaftGrad.addColorStop(0.38, "#6b4023");
-    shaftGrad.addColorStop(0.62, "#452614");
-    shaftGrad.addColorStop(1, "#140a05");
+    shaftGrad.addColorStop(0, "#2a1810");
+    shaftGrad.addColorStop(0.38, "#8a552f");
+    shaftGrad.addColorStop(0.62, "#5e361c");
+    shaftGrad.addColorStop(1, "#20120a");
     ctx.fillStyle = shaftGrad;
     ctx.fill();
 
@@ -470,6 +537,55 @@ class FireMage extends Character {
     ctx.arc(0, gemY, gemR, 0, Math.PI * 2);
     ctx.fill();
 
+    // The gathering shot, growing at the gem across the whole cooldown up to the exact size it
+    // will launch at. Ramped rather than linear so it spends a while as a small ember and then
+    // visibly balloons over the last stretch — that acceleration is what reads as "charging"
+    // instead of just "a circle slowly scaling". Drawn in the staff's local frame, so it swings
+    // along with the head.
+    const charge = this.chargeRatio;
+    if (charge > 0.02) {
+      const ramp = 0.1 + 0.9 * Math.pow(charge, 1.5);
+      const ballR = FIREMAGE_FIREBALL_RADIUS * ramp;
+      // Only really shakes once it's nearly full — an almost-ready shot straining to be let go
+      const strain = Math.pow(charge, 4);
+      const jitterX = Math.sin(t * 34 + this.bodySeed) * ballR * 0.05 * strain;
+      const jitterY = Math.cos(t * 41 + this.bodySeed) * ballR * 0.05 * strain;
+      const cx = jitterX, cy = gemY - ballR * 0.35 + jitterY;
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const cGlow = ctx.createRadialGradient(cx, cy, ballR * 0.1, cx, cy, ballR * 1.8);
+      cGlow.addColorStop(0, `rgba(255,170,60,${(0.35 + 0.3 * charge).toFixed(3)})`);
+      cGlow.addColorStop(0.5, `rgba(255,90,10,${(0.12 + 0.15 * charge).toFixed(3)})`);
+      cGlow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = cGlow;
+      ctx.beginPath();
+      ctx.arc(cx, cy, ballR * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.beginPath();
+      const pts = 18;
+      for (let i = 0; i <= pts; i++) {
+        const a = (i / pts) * Math.PI * 2;
+        const wob = 1
+          + Math.sin(a * 3 + t * 8 + this.bodySeed) * 0.1
+          + Math.sin(a * 5 - t * 11) * 0.06;
+        const px = cx + Math.cos(a) * ballR * wob, py = cy + Math.sin(a) * ballR * wob;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      const cGrad = ctx.createRadialGradient(cx + ballR * 0.2, cy - ballR * 0.2, ballR * 0.05, cx, cy, ballR * 1.1);
+      cGrad.addColorStop(0, "#fffbe0");
+      cGrad.addColorStop(0.3, "#ffd85a");
+      cGrad.addColorStop(0.62, "#ff8614");
+      cGrad.addColorStop(1, "#bd2c02");
+      ctx.fillStyle = cGrad;
+      ctx.globalAlpha = 0.55 + 0.45 * charge; // faint while it's still gathering, solid once full
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
     ctx.restore();
   }
 
@@ -500,10 +616,10 @@ class FireMage extends Character {
 
     // Robe — the body circle. Lit from the upper left, deepening to near-black at the hem.
     const robeGrad = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.06, 0, 0, r);
-    robeGrad.addColorStop(0, "#c9552a");
-    robeGrad.addColorStop(0.45, "#8e2f13");
-    robeGrad.addColorStop(0.8, "#4e1607");
-    robeGrad.addColorStop(1, "#260a03");
+    robeGrad.addColorStop(0, "#f5813f");
+    robeGrad.addColorStop(0.45, "#c4501f");
+    robeGrad.addColorStop(0.8, "#832d0f");
+    robeGrad.addColorStop(1, "#521806");
     ctx.fillStyle = robeGrad;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, Math.PI * 2);
@@ -516,7 +632,7 @@ class FireMage extends Character {
     ctx.clip();
 
     // Robe folds — a few soft vertical creases fanning out from under the mantle
-    ctx.strokeStyle = "rgba(40,10,2,0.4)";
+    ctx.strokeStyle = "rgba(70,20,5,0.3)";
     ctx.lineCap = "round";
     for (let i = -2; i <= 2; i++) {
       ctx.lineWidth = r * 0.05;
@@ -529,7 +645,7 @@ class FireMage extends Character {
     // Hem band with glowing runes — the "professional mage" trim
     ctx.beginPath();
     ctx.arc(0, 0, r * 0.86, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(28,8,2,0.75)";
+    ctx.strokeStyle = "rgba(64,20,6,0.55)";
     ctx.lineWidth = r * 0.19;
     ctx.stroke();
     ctx.save();
@@ -554,8 +670,8 @@ class FireMage extends Character {
     ctx.quadraticCurveTo(-r * 0.5, -r * 0.52, -r * 0.99, -r * 0.05);
     ctx.closePath();
     const mantleGrad = ctx.createLinearGradient(0, -r * 0.5, 0, r * 0.4);
-    mantleGrad.addColorStop(0, "#8e3a18");
-    mantleGrad.addColorStop(1, "#43140699");
+    mantleGrad.addColorStop(0, "#d15f2b");
+    mantleGrad.addColorStop(1, "#7d290e99");
     ctx.fillStyle = mantleGrad;
     ctx.fill();
 
@@ -574,9 +690,9 @@ class FireMage extends Character {
     ctx.quadraticCurveTo(0, -r * 0.02, -r * 0.74, -r * 0.18);
     ctx.closePath();
     const hoodGrad = ctx.createLinearGradient(-r * 0.5, -r * 1.1, r * 0.5, -r * 0.1);
-    hoodGrad.addColorStop(0, "#b84a1e");
-    hoodGrad.addColorStop(0.55, "#6a2410");
-    hoodGrad.addColorStop(1, "#280b03");
+    hoodGrad.addColorStop(0, "#ef7233");
+    hoodGrad.addColorStop(0.55, "#a83e1c");
+    hoodGrad.addColorStop(1, "#54190a");
     ctx.fillStyle = hoodGrad;
     ctx.fill();
     ctx.strokeStyle = "rgba(0,0,0,0.55)";
