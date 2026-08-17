@@ -138,6 +138,10 @@ function randomVelocity(speed) {
 
 function reset() {
   winner = null;
+  // Fire Mage's lava ambience is a looping audio node owned outside any one character (see
+  // firemage.js). The mage that started it is about to be thrown away, and if the new round
+  // doesn't happen to include a Fire Mage there'd be nothing left that could ever stop it.
+  stopFiremageLavaLoop();
   fighterA = ROSTER[pickA].ctor();
   fighterB = ROSTER[pickB].ctor();
   Object.assign(fighterA, randomVelocity(fighterA.speed));

@@ -557,18 +557,6 @@ class Gunner extends Character {
     return "#66ccff";
   }
 
-  drawHud(ctx, x, y, w) {
-    let ny = super.drawHud(ctx, x, y, w);
-    ctx.textAlign = "left";
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "14px Arial";
-    ctx.fillText(`Weapon: ${this.tier.name}`, x, ny);
-
-    if (this.isFinalTier) {
-      ctx.fillStyle = this.laserOverheated ? "#ff8866" : "#ffcc99";
-      ctx.font = "11px Arial";
-      ctx.fillText(this.laserOverheated ? "Overheating" : "Firing", x, ny + 20);
-    }
-  }
+  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
+  // character. The ability/cooldown readouts that used to sit under it are gone.
 }

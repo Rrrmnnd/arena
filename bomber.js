@@ -488,12 +488,6 @@ class Bomber extends Character {
     return "#ff8c30";
   }
 
-  drawHud(ctx, x, y, w) {
-    let ny = super.drawHud(ctx, x, y, w);
-    ctx.textAlign = "left";
-
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.font = "13px Arial";
-    ctx.fillText(`Ultimate ${Math.floor(this.ultimateRatio * 100)}% (${this.bombs.length} on field)`, x, ny);
-  }
+  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
+  // character. The ability/cooldown readouts that used to sit under it are gone.
 }

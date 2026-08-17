@@ -30,7 +30,8 @@ class Character {
     this.hitCooldown = 0;
 
     this.stunTimer = 0; // >0 while dazed: can't move or act
-    this.hitFlashTimer = 0;  // >0 right after taking damage: flashes the body white
+    this.hitFlashTimer = 0;  // >0 right after taking damage: flashes the body
+    this.hitFlashColor = "#ffffff"; // white for an ordinary hit; takeDamage tints it per damage source
     this.deathFadeTimer = 0; // >0 right after dying: body fades out over this window
     this.attackGraceTimer = ATTACK_GRACE_DURATION; // >0 right after spawning: can move but not attack yet
 
@@ -127,12 +128,15 @@ class Character {
     ctx.strokeRect(x, y, w, h);
   }
 
-  // `colorOverride`: lets a damage-over-time source (e.g. Virus's Infection) tint its own
-  // floating number differently from a normal hit, instead of always falling back to the
-  // big-hit-red/white default — see spawnDamageNumber.
+  // `colorOverride`: lets a damage-over-time source (Virus's Infection, Fire Mage's lava) tint
+  // its own floating number differently from a normal hit, instead of always falling back to the
+  // big-hit-red/white default — see spawnDamageNumber. It tints the body flash to match as well,
+  // so an elemental burn reads as its own element (lava scalds orange-red, poison flashes purple)
+  // rather than looking identical to a punch.
   takeDamage(dmg, colorOverride = null) {
     if (dmg > 0) {
       this.hitFlashTimer = HIT_FLASH_DURATION;
+      this.hitFlashColor = colorOverride || "#ffffff";
       spawnDamageNumber(this.x, this.y, dmg, dmg >= BIG_HIT_THRESHOLD, false, colorOverride);
     }
 
@@ -224,7 +228,7 @@ class Character {
     this.drawBody(ctx);
     if (this.hitFlashTimer > 0) {
       const savedColor = this.color;
-      this.color = "#ffffff";
+      this.color = this.hitFlashColor || "#ffffff";
       ctx.globalAlpha = alpha * Math.min(1, this.hitFlashTimer / HIT_FLASH_DURATION) * 0.75;
       this.drawBody(ctx);
       this.color = savedColor;

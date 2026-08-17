@@ -220,32 +220,6 @@ class PunchMan extends Character {
     return "#ff7028";
   }
 
-  drawHud(ctx, x, y, w) {
-    let ny = super.drawHud(ctx, x, y, w);
-    ctx.textAlign = "left";
-
-    if (this.celebrating) {
-      ctx.fillStyle = "#ffd23c";
-      ctx.font = "bold 14px Arial";
-      ctx.fillText("Victory!", x, ny);
-      return;
-    }
-
-    if (this.stunTimer > 0) {
-      ctx.fillStyle = "#999999";
-      ctx.font = "14px Arial";
-      ctx.fillText(`Stunned: ${this.stunTimer.toFixed(1)}s`, x, ny);
-      return;
-    }
-
-    if (this.skillState === "rage") {
-      ctx.fillStyle = "#ff7028";
-      ctx.font = "14px Arial";
-      ctx.fillText(`Rampage: ${this.chargeTime.toFixed(1)}s`, x, ny);
-    } else {
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.font = "13px Arial";
-      ctx.fillText(`Charge ${Math.floor(this.ultimateRatio * 100)}%`, x, ny);
-    }
-  }
+  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
+  // character. The ability/cooldown readouts that used to sit under it are gone.
 }

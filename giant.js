@@ -444,36 +444,6 @@ class Giant extends Character {
     return this.skillState === "absorbing" ? "#ffd23c" : "#64c8ff";
   }
 
-  drawHud(ctx, x, y, w) {
-    let ny = super.drawHud(ctx, x, y, w);
-    ctx.textAlign = "left";
-
-    if (this.skillState === "absorbing") {
-      ctx.fillStyle = "#ffd23c";
-      ctx.font = "14px Arial";
-      ctx.fillText(`Absorbing: ${Math.ceil(this.absorbedDamage)}`, x, ny);
-    } else if (this.stunTimer > 0) {
-      ctx.fillStyle = "#999999";
-      ctx.font = "14px Arial";
-      ctx.fillText(`Stunned: ${this.stunTimer.toFixed(1)}s`, x, ny);
-    } else if (this.isWindingUp) {
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "14px Arial";
-      ctx.fillText(`Winding up...`, x, ny);
-    } else if (this.pendingBurst > 0) {
-      ctx.fillStyle = "#ff5050";
-      ctx.font = "14px Arial";
-      ctx.fillText(`Next charge: +${Math.ceil(this.pendingBurst)}`, x, ny);
-    } else {
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.font = "13px Arial";
-      ctx.fillText(`Charge ${Math.floor(this.ultimateRatio * 100)}%`, x, ny);
-    }
-
-    if (this.burstFlashTimer > 0) {
-      ctx.fillStyle = "#ff5050";
-      ctx.font = "bold 15px Arial";
-      ctx.fillText(`Burst! ${this.lastBurst}`, x, ny + 20);
-    }
-  }
+  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
+  // character. The ability/cooldown readouts that used to sit under it are gone.
 }

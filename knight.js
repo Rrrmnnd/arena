@@ -412,37 +412,6 @@ class Knight extends Character {
     return "#e0b040";
   }
 
-  drawHud(ctx, x, y, w) {
-    let ny = super.drawHud(ctx, x, y, w);
-    ctx.textAlign = "left";
-
-    if (this.celebrating) {
-      ctx.fillStyle = "#e0b040";
-      ctx.font = "bold 14px Arial";
-      ctx.fillText("Victory!", x, ny);
-      return;
-    }
-
-    if (this.stunTimer > 0) {
-      ctx.fillStyle = "#999999";
-      ctx.font = "14px Arial";
-      ctx.fillText(`Stunned: ${this.stunTimer.toFixed(1)}s`, x, ny);
-      return;
-    }
-
-    // Damage rides on speed with no cap, so show what the next thrust is currently worth.
-    ctx.fillStyle = "rgba(255,255,255,0.75)";
-    ctx.font = "13px Arial";
-    ctx.fillText(`Speed: ${Math.round(this.speed)}   Dmg: ${this.attackDamage}`, x, ny);
-
-    if (this.mounted) {
-      ctx.fillStyle = "#e0b040";
-      ctx.font = "bold 14px Arial";
-      ctx.fillText("MOUNTED — one thrust", x, ny + 20);
-    } else {
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.font = "13px Arial";
-      ctx.fillText(`Charge ${Math.floor(this.ultimateRatio * 100)}%`, x, ny + 20);
-    }
-  }
+  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
+  // character. The ability/cooldown readouts that used to sit under it are gone.
 }

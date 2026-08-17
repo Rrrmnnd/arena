@@ -87,6 +87,13 @@ loadSfx("virusSaliva", "sfx_virus_saliva.mp3"); // the spike-throw normal attack
 loadSfx("virusSwim", "sfx_virus_swim.mp3"); // looped for however long the "traveling"/"returning" liquid phases actually last, then cut off — see virus.js
 loadSfx("virusPossess", "sfx_virus_possess.mp3"); // plays once for the "attached" hold, whose duration is set to match this clip exactly — see VIRUS_PARASITE_ATTACH_DURATION
 loadSfx("virusWin", "sfx_virus_win.mp3"); // fires once, right as the victory-overlay bake kicks off — see Virus.onVictory
+loadSfx("firemageThrow", "sfx_firemage_throw.mp3");     // released at the peak of the staff swing
+loadSfx("firemageExplode", "sfx_firemage_explode.mp3"); // the fireball detonating, on a body or a wall
+loadSfx("firemageTentacle", "sfx_firemage_tentacle.mp3"); // one play per eruption, not per arm
+loadSfx("firemageWhip", "sfx_firemage_whip.mp3");         // a tentacle's slam landing
+loadSfx("firemageLava", "sfx_firemage_lava.mp3");         // looped for exactly as long as any lava is burning — see firemage.js
+loadSfx("firemageOnLava", "sfx_firemage_onlava.mp3");     // one per lava damage tick, so 5x/sec while someone stands in it
+loadSfx("firemageFireworks", "sfx_firemage_fireworks.mp3"); // the victory display; its length sets how long the fireworks run
 
 // Browsers suspend AudioContext until a user gesture unlocks it
 function unlockAudio() {

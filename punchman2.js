@@ -1271,58 +1271,7 @@ class PunchManNew extends Character {
     return this.blitzing || this.chargeTime >= PUNCHMAN2_ULT_CHARGE_TIME ? "#ffd23c" : "#d0483c";
   }
 
-  drawHud(ctx, x, y, w) {
-    let ny = super.drawHud(ctx, x, y, w);
-    ctx.textAlign = "left";
-
-    if (this.celebrating) {
-      ctx.fillStyle = "#ffd23c";
-      ctx.font = "bold 14px Arial";
-      ctx.fillText("Victory!", x, ny);
-      return;
-    }
-
-    if (this.blitzing) {
-      ctx.fillStyle = "#ffd23c";
-      ctx.font = "bold 15px Arial";
-      ctx.fillText(`BLITZ  ${Math.min(this.ultStrikesDone, PUNCHMAN2_ULT_STRIKES)}/${PUNCHMAN2_ULT_STRIKES}`, x, ny);
-      return;
-    }
-
-    if (this.stunTimer > 0) {
-      ctx.fillStyle = "#999999";
-      ctx.font = "14px Arial";
-      ctx.fillText(`Stunned: ${this.stunTimer.toFixed(1)}s`, x, ny);
-      return;
-    }
-
-    // Three pips: the filled ones are punches already landed in this set, and the third
-    // lights up gold when the heavy hit is loaded.
-    const pipR = 7;
-    const gap = 22;
-    for (let i = 0; i < PUNCHMAN2_PUNCHES_PER_SET; i++) {
-      const cx = x + pipR + i * gap;
-      const cy = ny - 5;
-      const filled = i < this.comboStep;
-      const isHeavySlot = i === PUNCHMAN2_PUNCHES_PER_SET - 1;
-      ctx.beginPath();
-      ctx.arc(cx, cy, pipR, 0, Math.PI * 2);
-      ctx.fillStyle = filled ? (isHeavySlot ? "#ffb03c" : "#d0483c") : "rgba(255,255,255,0.12)";
-      ctx.fill();
-      ctx.strokeStyle = isHeavySlot && this.nextPunchIsHeavy ? "#ffd23c" : "rgba(255,255,255,0.4)";
-      ctx.lineWidth = isHeavySlot && this.nextPunchIsHeavy ? 2.5 : 1.5;
-      ctx.stroke();
-    }
-
-    ctx.font = "13px Arial";
-    ctx.fillStyle = this.nextPunchIsHeavy ? "#ffd23c" : "rgba(255,255,255,0.7)";
-    ctx.fillText(this.nextPunchIsHeavy ? "HEAVY ready" : "Building combo", x + gap * 3 + 4, ny);
-
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.font = "13px Arial";
-    ctx.fillText(
-      this.dashing ? "Dashing!" : this.dashCooldown > 0 ? `Dash: ${this.dashCooldown.toFixed(1)}s` : "Dash ready",
-      x, ny + 20
-    );
-  }
+  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
+  // character. The ability/cooldown readouts that used to sit under it — including this one's
+  // combo pips — are gone.
 }

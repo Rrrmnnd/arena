@@ -92,10 +92,10 @@ const VIRUS_PARASITE_ATTACH_DURATION = 4.0; // seconds actually fused on, tickin
 const VIRUS_PARASITE_TICK_DAMAGE    = 5;  // flat, per VIRUS_PARASITE_TICK_INTERVAL, while attached — now one of only two damage sources Virus has at all, alongside Infection's own DoT
 const VIRUS_PARASITE_TICK_INTERVAL  = 1.0;
 // The heal scales off however many Infection stacks the target is already carrying the instant
-// attach lands — 15 against a clean target, +5 per stack already on them (so a fully-stacked
-// 5-layer target heals 40) — rewarding landing the ultimate on something Virus has already been
+// attach lands — 10 against a clean target, +5 per stack already on them (so a fully-stacked
+// 5-layer target heals 35) — rewarding landing the ultimate on something Virus has already been
 // poking rather than treating it as a free heal regardless of setup.
-const VIRUS_PARASITE_HEAL_BASE      = 15;
+const VIRUS_PARASITE_HEAL_BASE      = 10;
 const VIRUS_PARASITE_HEAL_PER_STACK = 5;
 const VIRUS_PARASITE_RETURN_SPEED   = 480; // a drift back out, not the urgent dash-in — see VIRUS_PARASITE_TRAVEL_SPEED
 const VIRUS_PARASITE_RETURN_TIMEOUT = 2.0; // safety in case the rolled point is somehow never reached
@@ -1292,24 +1292,8 @@ class Virus extends Character {
     return "#c060e8";
   }
 
-  drawHud(ctx, x, y, w) {
-    let ny = super.drawHud(ctx, x, y, w);
-    ctx.textAlign = "left";
-
-    if (this.parasitePhase) {
-      const label = this.parasitePhase === "traveling" ? "SWIMMING"
-        : this.parasitePhase === "attached" ? "PARASITIZING" : "RETURNING";
-      ctx.fillStyle = "#ff70f0";
-      ctx.font = "bold 14px Arial";
-      ctx.fillText(label, x, ny);
-      ny += 18;
-    }
-
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.font = "13px Arial";
-    ctx.fillText(this.spikeTimer > 0 ? `Spike: ${this.spikeTimer.toFixed(2)}s` : "Spike ready", x, ny);
-    ctx.fillText(`Parasitize: ${this.ultimateCooldown > 0 ? this.ultimateCooldown.toFixed(1) + "s" : "ready"}`, x, ny + 18);
-  }
+  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
+  // character. The ability/cooldown readouts that used to sit under it are gone.
 
   // Fired once by main.js the instant Virus is declared the winner. Freezes it in place (see the
   // celebratingVictory branch in update()) and rolls a fresh dense root network PLUS four

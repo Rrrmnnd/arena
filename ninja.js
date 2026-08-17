@@ -85,6 +85,14 @@ const NINJA_SLASH_STUN_TOPUP       = 0.2;  // refreshed every frame while slashi
 const NINJA_CLONE_MAX_HP           = 25;
 const NINJA_ULTIMATE_COOLDOWN_PER_DAMAGE = 0.1; // seconds shaved off the ultimate cooldown per point of damage dealt — original and clones alike
 
+// HUD geometry for the clone panel (see drawCloneHud). These mirror what Character.drawHud()
+// lays out from its `y`, which it doesn't expose: the name sits on the baseline at y, the HP bar
+// spans y+14..y+32, the ultimate bar y+36..y+46, and it returns y+62. So a block's bottom edge is
+// DROP below its baseline, and the next block's baseline is BLOCK_H below this one's.
+const NINJA_HUD_BLOCK_H       = 62;
+const NINJA_HUD_BLOCK_DROP    = 46;
+const NINJA_CLONE_HUD_GAP     = 8;  // breathing room between the Ninja's own panel and the clones'
+
 class Shuriken {
   constructor(x, y, angle) {
     this.x = x;
@@ -908,47 +916,68 @@ class Ninja extends Character {
   }
 
   drawHud(ctx, x, y, w) {
-    let ny = super.drawHud(ctx, x, y, w);
+    const ny = super.drawHud(ctx, x, y, w);
     if (this.showsLowHpMarker) {
       const barH = 18, barY = y + 14; // same geometry Character.drawHud() uses for the HP bar
       this.drawHpMidpointMarker(ctx, x + w / 2, barY, barY + barH);
     }
     ctx.textAlign = "left";
 
-    if (this.celebratingVictory) {
-      ctx.fillStyle = "#e8e8e8";
-      ctx.font = "bold 14px Arial";
-      ctx.fillText("Victory!", x, ny);
-      return;
-    }
+    // The only thing left under the bars for any character: a Ninja's clones, because each is a
+    // whole extra fighter rather than a status readout — see drawCloneHud.
+    this.drawCloneHud(ctx, x, ny, w, this.getExtraBodies());
+  }
 
-    if (this.slashing) {
-      ctx.fillStyle = "#ff6060";
-      ctx.font = "bold 14px Arial";
-      ctx.fillText(`THREE-SLASH! (${this.slashesLanded}/${NINJA_SLASH_COUNT})`, x, ny);
-      ny += 18;
-    } else if (this.stunTimer > 0) {
-      ctx.fillStyle = "#999999";
-      ctx.font = "14px Arial";
-      ctx.fillText(`Stunned: ${this.stunTimer.toFixed(1)}s`, x, ny);
-      return;
-    }
+  // Would `count` clone blocks, starting at `top`, still finish above the arena?
+  cloneHudFits(top, count) {
+    return top + NINJA_CLONE_HUD_GAP + (count - 1) * NINJA_HUD_BLOCK_H + NINJA_HUD_BLOCK_DROP
+      <= ARENA.y - 6;
+  }
 
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.font = "13px Arial";
-    ctx.fillText(
-      this.shurikenTimer > 0 ? `Shuriken: ${this.shurikenTimer.toFixed(2)}s` : "Shuriken ready",
-      x, ny
-    );
-    ctx.fillText(
-      this.meleeTimer > 0 ? "Dagger: recovering" : "Dagger ready (on contact)",
-      x, ny + 18
-    );
-    ctx.fillText(
-      `Three-Slash: ${this.ultimateCooldown > 0 ? this.ultimateCooldown.toFixed(1) + "s" : "ready"}` +
-        (this.getExtraBodies().length ? ` — ${this.getExtraBodies().length} clone(s) out` : ""),
-      x, ny + 36
-    );
+  // Each living clone gets the SAME HUD block the Ninja itself gets — bold name, full-width HP
+  // bar, HP numbers, ultimate bar — just labelled "Clone".
+  //
+  // Worth the space because a clone is not decoration: it's a full fighter with its own HP that
+  // attacks, takes damage, and counts for the win condition. main.js's isFighterDown() only calls
+  // a Ninja out once the body is dead AND every clone is gone, so a Ninja on 0 HP with a clone
+  // still up is very much alive — and a top HUD showing nothing but one empty bar was actively
+  // misleading about that.
+  drawCloneHud(ctx, x, y, w, clones) {
+    if (!clones.length) return;
+
+    // Fitted to the gap above the arena rather than assuming a count, so nothing is ever drawn
+    // over the arena wall. In practice this always resolves to a single block: a clone can't
+    // summon a clone of its own (NinjaClone.triggerShadowClone is a no-op), and simulating the
+    // Ninja against the whole roster never put more than one on the field at a time. The rest of
+    // this is here so an unexpected second one degrades gracefully instead of overdrawing.
+    let showing = clones.length;
+    while (showing > 0 && !this.cloneHudFits(y, showing)) showing--;
+
+    let by = y + NINJA_CLONE_HUD_GAP;
+    for (let i = 0; i < showing; i++) {
+      const label = clones.length > 1 ? `Clone ${i + 1}` : "Clone";
+      by = this.drawCloneBlock(ctx, clones[i], label, x, by, w);
+    }
+    // Whatever didn't fit gets a count, but only if there's a spare line for it — never at the
+    // cost of dropping a block that did fit
+    if (showing < clones.length && by + 4 <= ARENA.y) {
+      ctx.textAlign = "left";
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.font = "13px Arial";
+      ctx.fillText(`+${clones.length - showing} more clone(s)`, x, by);
+    }
+  }
+
+  // Routed through Character.prototype rather than calling clone.drawHud(): NinjaClone inherits
+  // Ninja's drawHud, which would print a second set of ability lines and recurse straight back
+  // into the clone panel. The base method is exactly the block wanted here and nothing more.
+  drawCloneBlock(ctx, clone, label, x, y, w) {
+    const savedName = clone.name;
+    clone.name = label;
+    const ny = Character.prototype.drawHud.call(clone, ctx, x, y, w);
+    clone.name = savedName;
+    ctx.textAlign = "left";
+    return ny;
   }
 }
 

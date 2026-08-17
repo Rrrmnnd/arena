@@ -470,7 +470,8 @@ class Demon extends Character {
   // Overrides the base name+HP-bar panel (rather than calling super.drawHud()) so the bar can
   // show banked overflow HP past the normal cap — see hpBarInfo.
   // Doesn't call super.drawHud() — the segmented overflow HP bar needs its own drawing code —
-  // but still follows the same fixed order: name, HP bar, ultimate bar, then other info below.
+  // but still follows the same fixed order the base does: name, HP bar, ultimate bar, and
+  // nothing after that.
   drawHud(ctx, x, y, w) {
     ctx.textAlign = "left";
     ctx.fillStyle = "#ffffff";
@@ -487,16 +488,11 @@ class Demon extends Character {
     ctx.fillText(`${Math.ceil(this.hp)}/${this.maxHp}`, x + w, barY - 4);
     ctx.textAlign = "left";
 
-    let ny = barY + barH + 14;
+    const ny = barY + barH + 14;
 
     const ultBarH = 10;
     const ultBarY = ny - 10;
     this.drawBar(ctx, x, ultBarY, w, ultBarH, this.ultimateRatio, this.ultimateBarColor, 1);
-    ny = ultBarY + ultBarH + 16;
-
-    const percent = Math.round(this.ultimateRatio * 100);
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.font = "13px Arial";
-    ctx.fillText(`Ultimate ${percent}% (${this.embeddedTridents.length} stuck)`, x, ny);
+    return ultBarY + ultBarH + 16;
   }
 }
