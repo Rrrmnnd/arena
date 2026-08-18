@@ -122,3 +122,11 @@ function drawTitle(ctx, text = "Battle Arena") {
   ctx.textAlign = "center";
   ctx.fillText(text, WIDTH / 2, TITLE_Y);
 }
+
+// The twitch overlay skips drawTitle() entirely (see main.js's render) — there's no separate
+// "vs" banner up top for that layout, just the two fighters' own names sitting bigger in their
+// HUD panels. Character.drawHud() and Demon's override (which can't call the base method — see
+// there) both read this so the two stay in lockstep.
+function hudNameFont() {
+  return arenaLayout === "twitch" ? "bold 30px Arial" : "bold 22px Arial";
+}

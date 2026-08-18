@@ -305,7 +305,7 @@ class Character {
   drawHud(ctx, x, y, w) {
     ctx.textAlign = "left";
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 22px Arial";
+    ctx.font = hudNameFont();
     ctx.fillText(this.alive ? this.name : `${this.name} (Defeated)`, x, y);
 
     const barH = 18;

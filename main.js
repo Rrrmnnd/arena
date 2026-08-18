@@ -851,7 +851,9 @@ function render(time) {
         c.fillText(`LAB — ${labFighter ? labFighter.name : "-"}`, ARENA.x + ARENA.w / 2, 58);
         labDrawPanel(c);
       } else if (gameMode === "1v1") {
-        drawTitle(c, matchTitle);
+        // The twitch overlay skips the "X vs Y" banner — see hudNameFont() in arena.js, which is
+        // what puts the size back into the fighters' own HUD names instead.
+        if (arenaLayout !== "twitch") drawTitle(c, matchTitle);
       } else if (boss) {
         drawVsBossTitle(c);
       }
