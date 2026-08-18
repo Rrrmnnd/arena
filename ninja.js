@@ -52,7 +52,7 @@ const NINJA_BIG_SWING_START_ANGLE = -1.95;
 const NINJA_BIG_SWING_END_ANGLE   = 1.75;
 const NINJA_BIG_DAGGER_SCALE      = 2.1;
 
-// Ultimate — Three-Slash: on a 15s cooldown, teleports behind the current opponent (same
+// Ultimate — Three-Slash: on a 17s cooldown, teleports behind the current opponent (same
 // "close the gap instantly" trick used throughout the roster) and lands three strikes on them,
 // building in weight — NINJA_SLASH_DAMAGES is [5, 5, 10], so the finishing third blow is twice
 // as heavy as the first two, with a bigger blade, an even heavier blood burst, and a longer
@@ -73,7 +73,7 @@ const NINJA_BIG_DAGGER_SCALE      = 2.1;
 // taking damage instead of a cooldown. Purely one-shot per fighter; it doesn't retrigger if HP
 // climbs back up or drops further. A dashed marker on the HP bar (see drawHpMidpointMarker)
 // shows exactly where that halfway line sits.
-const NINJA_ULTIMATE_COOLDOWN      = 15.0;
+const NINJA_ULTIMATE_COOLDOWN      = 17.0;
 const NINJA_SLASH_DAMAGES          = [5, 5, 10]; // per strike, in order — the third lands heaviest
 const NINJA_SLASH_COUNT            = NINJA_SLASH_DAMAGES.length;
 const NINJA_SLASH_TOTAL_DAMAGE     = NINJA_SLASH_DAMAGES.reduce((a, b) => a + b, 0); // 20
