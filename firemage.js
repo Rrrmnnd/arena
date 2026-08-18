@@ -135,7 +135,7 @@ const FIREMAGE_TENTACLE_ANIM_TIME =
 const FIREMAGE_TENTACLE_IDLE_WAIT =
   Math.max(0, FIREMAGE_TENTACLE_ATTACK_INTERVAL - FIREMAGE_TENTACLE_ANIM_TIME);
 
-const FIREMAGE_TENTACLE_LIFETIME = 8.0;  // then it sinks back into the lava — see the retract state
+const FIREMAGE_TENTACLE_LIFETIME = 10.0;  // then it sinks back into the lava — see the retract state
 const FIREMAGE_TENTACLE_EMERGE   = 0.45; // seconds spent rising up out of the lava when first summoned
 const FIREMAGE_TENTACLE_RETRACT  = 0.55; // seconds spent sinking back down again at the end
 const FIREMAGE_TENTACLE_IDLE_HEIGHT = 100; // how far the tip stands above its root while just waiting
