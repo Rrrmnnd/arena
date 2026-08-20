@@ -444,6 +444,12 @@ class Giant extends Character {
     return this.skillState === "absorbing" ? "#ffd23c" : "#64c8ff";
   }
 
-  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
-  // character. The ability/cooldown readouts that used to sit under it are gone.
+  // Absorbing is the one Giant state the bars can't show — the ultimate bar reads as charge
+  // either way, but what's being banked into the counter-burst is the number that matters.
+  drawHud(ctx, x, y, w) {
+    const ny = super.drawHud(ctx, x, y, w);
+    if (this.skillState === "absorbing") {
+      this.drawHudNote(ctx, x, ny, `Absorbing ${Math.ceil(this.absorbedDamage)}`, "#ffd23c");
+    }
+  }
 }

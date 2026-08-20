@@ -20,6 +20,7 @@ const ROSTER = [
   { label: "Ninja", ctor: () => new Ninja(0, 0) },
   { label: "Virus", ctor: () => new Virus(0, 0) },
   { label: "Fire Mage", ctor: () => new FireMage(0, 0), excludeFromTwitch: true },
+  { label: "Archer", ctor: () => new Archer(0, 0), excludeFromTwitch: true },
 ];
 
 let gameMode = "1v1"; // "1v1" | "vsboss" — which mode is currently toggled in the setup screen
@@ -111,6 +112,7 @@ function checkWinner() {
   if (roundState !== "playing") return;
   if (hasSelfDestructPending(fighterA) || hasSelfDestructPending(fighterB)) return;
   if (hasBombsPending(fighterA) || hasBombsPending(fighterB)) return;
+  if (fighterA.blocksRoundEnd || fighterB.blocksRoundEnd) return;
 
   const aDown = isFighterDown(fighterA);
   const bDown = isFighterDown(fighterB);
@@ -303,6 +305,7 @@ function checkVsBossWinner() {
   if (vsBossState !== "playing") return;
   const all = [boss, ...allies];
   if (all.some(hasSelfDestructPending) || all.some(hasBombsPending)) return;
+  if (all.some((f) => f.blocksRoundEnd)) return;
 
   const bossAlive = boss.alive;
   const anyAllyAlive = allies.some((a) => a.alive);
@@ -829,6 +832,16 @@ function render(time) {
       drawFlashes(c);
       drawSmokePuffs(c);
       drawDamageNumbers(c);
+      // The mirror of drawGroundEffects: anything a character puts OVER the whole scene rather
+      // than under it, while the round is still being fought (Archer's falling sun). Distinct
+      // from drawVictoryOverlay, which only runs once someone has already won.
+      if (gameMode === "1v1") {
+        fighterA.drawOverlayEffects(c);
+        fighterB.drawOverlayEffects(c);
+      } else if (boss) {
+        boss.drawOverlayEffects(c);
+        for (const ally of allies) ally.drawOverlayEffects(c);
+      }
     }
     c.restore();
 

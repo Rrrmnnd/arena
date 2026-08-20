@@ -488,6 +488,10 @@ class Bomber extends Character {
     return "#ff8c30";
   }
 
-  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
-  // character. The ability/cooldown readouts that used to sit under it are gone.
+  // How many bombs are live is the whole read on a Bomber — the ultimate bar says nothing about
+  // what's already sitting on the floor waiting to go off.
+  drawHud(ctx, x, y, w) {
+    const ny = super.drawHud(ctx, x, y, w);
+    if (this.bombs.length) this.drawHudNote(ctx, x, ny, `${this.bombs.length} bombs live`);
+  }
 }

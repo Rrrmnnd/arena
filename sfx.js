@@ -94,6 +94,12 @@ loadSfx("firemageWhip", "sfx_firemage_whip.mp3");         // a tentacle's slam l
 loadSfx("firemageLava", "sfx_firemage_lava.mp3");         // looped for exactly as long as any lava is burning — see firemage.js
 loadSfx("firemageOnLava", "sfx_firemage_onlava.mp3");     // one per lava damage tick, so 5x/sec while someone stands in it
 loadSfx("firemageFireworks", "sfx_firemage_fireworks.mp3"); // the victory display; its length sets how long the fireworks run
+loadSfx("archerBow", "sfx_archer_bow.mp3");             // an ordinary arrow leaving the bow
+loadSfx("archerBowHit", "sfx_archer_bowhit.mp3");       // an arrow landing on a body
+loadSfx("archerUltCharge", "sfx_archer_arcultcharge.mp3"); // the five-second Sun Shot draw
+loadSfx("archerBowShotSun", "sfx_archer_bowshotsun.mp3");  // the ultimate's arrow going up
+loadSfx("archerSundown", "sfx_archer_sundown.mp3");     // the sun falling — see archer.js for how it's timed
+loadSfx("archerSunCrash", "sfx_archer_suncrash.mp3");   // the sun landing
 
 // Browsers suspend AudioContext until a user gesture unlocks it
 function unlockAudio() {

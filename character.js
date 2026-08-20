@@ -7,6 +7,14 @@ const BIG_HIT_THRESHOLD = 20;      // damage at or above this gets an emphasized
 const ATTACK_GRACE_DURATION = 1.5; // seconds at round start where every character can move but not attack
 const KNOCKBACK_DECAY_RATE = 2.5;  // how fast an external knockback/slow impulse fades back to nothing (per second)
 
+// Bleed: a stacking vulnerability debuff, currently applied only by the Archer's arrows but
+// implemented here on the base class because it has to amplify damage from EVERY source, not
+// just from whoever applied it. Stacks share one timer that's refreshed in full by each new
+// application, so keeping the stacks up means landing hits at least this often.
+const BLEED_MAX_STACKS       = 5;
+const BLEED_DAMAGE_PER_STACK = 0.1; // +10% damage taken per stack, so 5 stacks = +50%
+const BLEED_DURATION         = 6.0;
+
 class Character {
   constructor({ x, y, size = CHAR_BASE_SIZE, color = "#64c8ff", maxHp = 100, name = "Character", speed = 150 }) {
     this.x = x;
@@ -41,6 +49,34 @@ class Character {
     // (e.g. the Giant's charge dash, which sets vx/vy directly and must stay exactly as set).
     this.knockbackVx = 0;
     this.knockbackVy = 0;
+
+    this.bleedStacks = 0; // see applyBleed / bleedMultiplier
+    this.bleedTimer = 0;  // one shared timer for the whole stack, refreshed by each application
+    this.transfixedTimer = 0; // >0: rooted and staring upward, see applyTransfix
+  }
+
+  // Roots this character in place, staring up at whatever is about to happen to it. Mechanically
+  // it's a stun — every character already bails out of its own update() on stunTimer, which is
+  // exactly the "stop everything" behaviour wanted — but it's flagged separately so it reads as
+  // dread rather than dizziness: the cartoon spiral is suppressed and the body leans back to look
+  // up instead (see drawStunEffect / draw).
+  applyTransfix(duration) {
+    if (!this.alive) return;
+    this.transfixedTimer = Math.max(this.transfixedTimer, duration);
+    this.applyStun(duration);
+  }
+
+  // Adds bleed stacks and refreshes the whole stack's timer. Dead characters are left alone so a
+  // killing blow can't leave a corpse visibly bleeding through its death fade.
+  applyBleed(stacks = 1) {
+    if (!this.alive) return;
+    this.bleedStacks = Math.min(BLEED_MAX_STACKS, this.bleedStacks + stacks);
+    this.bleedTimer = BLEED_DURATION;
+  }
+
+  // What all incoming damage gets multiplied by right now — see takeDamage.
+  get bleedMultiplier() {
+    return 1 + this.bleedStacks * BLEED_DAMAGE_PER_STACK;
   }
 
   // Applies an external velocity impulse (e.g. an explosion) that gradually fades back to
@@ -93,11 +129,26 @@ class Character {
     return false;
   }
 
+  // True while this character has something in flight that still has to resolve before the round
+  // can be called — main.js's checkWinner holds off entirely while either side reports true, the
+  // same way it already waits out a pending self-destruct or live bombs. Meant for effects that
+  // are committed the moment they're launched and shouldn't be cancellable by killing the caster
+  // afterwards (Archer's Sun Shot, once the arrow is away). Default false.
+  get blocksRoundEnd() {
+    return false;
+  }
+
   // Drawn right after the arena/wall-cracks but before EITHER fighter's own body — for anything
   // a character leaves sitting on the floor itself rather than carried on a character (e.g. Fire
   // Mage's lava patches), so both fighters visually stand on top of it instead of it painting
   // over them. Empty for every character that doesn't have any; see main.js's drawFrame.
   drawGroundEffects(ctx) {}
+
+  // The mirror of drawGroundEffects — drawn after BOTH fighters and all the particles, for
+  // anything a character puts over the whole scene while the round is still live (see Archer's
+  // falling sun). Not the same thing as drawVictoryOverlay, which only runs once the round has
+  // already been decided. Empty for every character that doesn't have one.
+  drawOverlayEffects(ctx) {}
 
   // Extra fighter-owned bodies that should be just as targetable and collidable as this
   // character itself (e.g. the Ninja's shadow clone) — main.js folds these into both who the
@@ -134,6 +185,11 @@ class Character {
   // so an elemental burn reads as its own element (lava scalds orange-red, poison flashes purple)
   // rather than looking identical to a punch.
   takeDamage(dmg, colorOverride = null) {
+    // Bleed scales EVERYTHING that lands, not just the arrows that applied it — the whole point
+    // of the debuff is that a bleeding target is easier to kill by any means. Applied here at the
+    // single choke point every damage source funnels through, so no attack can miss it.
+    if (dmg > 0) dmg *= this.bleedMultiplier;
+
     if (dmg > 0) {
       this.hitFlashTimer = HIT_FLASH_DURATION;
       this.hitFlashColor = colorOverride || "#ffffff";
@@ -210,6 +266,11 @@ class Character {
     if (!this.alive) return;
     if (this.hitFlashTimer > 0) this.hitFlashTimer -= dt;
     if (this.attackGraceTimer > 0) this.attackGraceTimer -= dt;
+    if (this.bleedTimer > 0) {
+      this.bleedTimer -= dt;
+      if (this.bleedTimer <= 0) this.bleedStacks = 0; // the whole stack drops at once, not one at a time
+    }
+    if (this.transfixedTimer > 0) this.transfixedTimer -= dt;
     if (this.stunTimer > 0) {
       this.stunTimer -= dt;
       if (this.stunTimer <= 0) this.onStunEnd();
@@ -225,6 +286,17 @@ class Character {
     const alpha = this.alive ? 1 : Math.max(0, this.deathFadeTimer / DEATH_FADE_DURATION);
     ctx.save();
     ctx.globalAlpha = alpha;
+    // Leaning back to look up. Applied around the whole body rather than inside any one
+    // character's drawBody, so it works for every character without touching any of them —
+    // they all draw around their own x/y, so rotating about a point below their feet tips the
+    // whole figure back as one piece.
+    if (this.transfixedTimer > 0) {
+      const lean = -0.3 * Math.min(1, this.transfixedTimer * 4); // eases out as it wears off
+      const pivotY = this.y + this.size * 0.5;
+      ctx.translate(this.x, pivotY);
+      ctx.rotate(lean);
+      ctx.translate(-this.x, -pivotY);
+    }
     this.drawBody(ctx);
     if (this.hitFlashTimer > 0) {
       const savedColor = this.color;
@@ -236,15 +308,52 @@ class Character {
     ctx.restore();
 
     if (this.alive) {
+      this.drawBleedEffect(ctx);
       this.drawFieldHpBar(ctx);
       this.drawStunEffect(ctx);
     }
+  }
+
+  // Bleed, shown as drops running down the body — one per stack, so how badly a target is
+  // bleeding is readable off the character itself rather than only off a number somewhere.
+  // Each drop falls on its own loop and restarts at the top, at a rate that climbs with the
+  // stack count, so five stacks visibly pours where one just trickles.
+  drawBleedEffect(ctx) {
+    if (this.bleedStacks <= 0) return;
+    const r = this.size / 2;
+    const t = performance.now() / 1000;
+    // Fades out over the last second of the debuff, so it stops rather than vanishing mid-flow
+    const alpha = Math.min(1, this.bleedTimer) * 0.9;
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    for (let i = 0; i < this.bleedStacks; i++) {
+      // Spread across the lower half of the body, evenly regardless of how many there are
+      const a = -Math.PI * 0.42 + (Math.PI * 0.84) * ((i + 0.5) / this.bleedStacks);
+      const ox = Math.sin(a) * r * 0.78;
+      const fall = ((t * (0.7 + this.bleedStacks * 0.12) + i * 0.37) % 1);
+      const oy = -r * 0.1 + fall * r * 1.05;
+      const fade = Math.sin(fall * Math.PI); // fades in at the top, out at the bottom
+      ctx.globalAlpha = alpha * fade;
+      ctx.fillStyle = "#c01d1d";
+      ctx.beginPath();
+      // A teardrop: round belly, pointed top
+      ctx.moveTo(ox, oy - r * 0.13);
+      ctx.quadraticCurveTo(ox + r * 0.07, oy, ox, oy + r * 0.07);
+      ctx.quadraticCurveTo(ox - r * 0.07, oy, ox, oy - r * 0.13);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // Shared "dizzy" indicator: a small purple spiral that spins above a stunned
   // character's head, like a classic cartoon dazed effect.
   drawStunEffect(ctx) {
     if (this.stunTimer <= 0) return;
+    // Transfixed characters are stunned under the hood, but the dizzy spiral would read as a
+    // gag exactly when the moment wants to be ominous — the lean-back in draw() carries it
+    // instead. See applyTransfix.
+    if (this.transfixedTimer > 0) return;
 
     const cx = this.x;
     const cy = this.y - this.size / 2 - 30;
@@ -275,6 +384,18 @@ class Character {
   drawBody(ctx) {
     ctx.fillStyle = this.color;
     ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+  }
+
+  // One short line of state under the bars, for the single thing about this character the bars
+  // themselves can't say. Deliberately capped at one line each: the per-character cooldown
+  // readouts that used to live here stacked up into a wall of text nobody read. A character with
+  // nothing notable happening passes null and draws nothing at all.
+  drawHudNote(ctx, x, y, text, color = "rgba(255,255,255,0.62)") {
+    if (!text) return;
+    ctx.textAlign = "left";
+    ctx.fillStyle = color;
+    ctx.font = "13px Arial";
+    ctx.fillText(text, x, y);
   }
 
   // HP bar floats above the character's head for a quick read during combat. Directly under

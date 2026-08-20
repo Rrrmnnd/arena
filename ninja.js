@@ -923,9 +923,15 @@ class Ninja extends Character {
     }
     ctx.textAlign = "left";
 
-    // The only thing left under the bars for any character: a Ninja's clones, because each is a
-    // whole extra fighter rather than a status readout — see drawCloneHud.
-    this.drawCloneHud(ctx, x, ny, w, this.getExtraBodies());
+    // Mid-ultimate is worth a line; the shuriken/dagger cooldowns aren't. The clones below are
+    // a different thing entirely — each is a whole extra fighter, not a status readout.
+    let ny2 = ny;
+    if (this.slashing) {
+      this.drawHudNote(ctx, x, ny2,
+        `THREE-SLASH ${this.slashesLanded}/${NINJA_SLASH_COUNT}`, "#ff6060");
+      ny2 += 18;
+    }
+    this.drawCloneHud(ctx, x, ny2, w, this.getExtraBodies());
   }
 
   // Would `count` clone blocks, starting at `top`, still finish above the arena?

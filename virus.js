@@ -1292,8 +1292,14 @@ class Virus extends Character {
     return "#c060e8";
   }
 
-  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
-  // character. The ability/cooldown readouts that used to sit under it are gone.
+  drawHud(ctx, x, y, w) {
+    const ny = super.drawHud(ctx, x, y, w);
+    if (this.parasitePhase) {
+      const label = this.parasitePhase === "traveling" ? "SWIMMING"
+        : this.parasitePhase === "attached" ? "PARASITIZING" : "RETURNING";
+      this.drawHudNote(ctx, x, ny, label, "#ff70f0");
+    }
+  }
 
   // Fired once by main.js the instant Virus is declared the winner. Freezes it in place (see the
   // celebratingVictory branch in update()) and rolls a fresh dense root network PLUS four

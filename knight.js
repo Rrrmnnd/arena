@@ -412,6 +412,8 @@ class Knight extends Character {
     return "#e0b040";
   }
 
-  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
-  // character. The ability/cooldown readouts that used to sit under it are gone.
+  drawHud(ctx, x, y, w) {
+    const ny = super.drawHud(ctx, x, y, w);
+    if (this.mounted) this.drawHudNote(ctx, x, ny, "MOUNTED — one thrust", "#e0b040");
+  }
 }

@@ -493,6 +493,13 @@ class Demon extends Character {
     const ultBarH = 10;
     const ultBarY = ny - 10;
     this.drawBar(ctx, x, ultBarY, w, ultBarH, this.ultimateRatio, this.ultimateBarColor, 1);
-    return ultBarY + ultBarH + 16;
+    const bottom = ultBarY + ultBarH + 16;
+
+    // How many tridents are stuck in the opponent is what the ultimate detonates, so it's the one
+    // number worth showing — the bar above is just the meter filling.
+    if (this.embeddedTridents.length) {
+      this.drawHudNote(ctx, x, bottom, `${this.embeddedTridents.length} stuck`, "#ff8a8a");
+    }
+    return bottom;
   }
 }

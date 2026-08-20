@@ -220,6 +220,10 @@ class PunchMan extends Character {
     return "#ff7028";
   }
 
-  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
-  // character. The ability/cooldown readouts that used to sit under it are gone.
+  drawHud(ctx, x, y, w) {
+    const ny = super.drawHud(ctx, x, y, w);
+    if (this.skillState === "rage") {
+      this.drawHudNote(ctx, x, ny, `Rampage ${this.chargeTime.toFixed(1)}s`, "#ff7028");
+    }
+  }
 }

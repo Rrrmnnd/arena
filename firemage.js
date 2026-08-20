@@ -2092,6 +2092,12 @@ class FireMage extends Character {
     super.draw(ctx);
   }
 
-  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
-  // character. The ability/cooldown readouts that used to sit under it are gone.
+  // What's actually on the field — the ultimate bar is a cooldown and says nothing about how much
+  // lava is down, which is what decides whether casting it does anything at all.
+  drawHud(ctx, x, y, w) {
+    const ny = super.drawHud(ctx, x, y, w);
+    const arms = this.tentacles.filter((t) => t.alive).length;
+    if (arms) this.drawHudNote(ctx, x, ny, `${arms} tentacles`, "#ff8a2a");
+    else if (this.lavaPatches.length) this.drawHudNote(ctx, x, ny, `${this.lavaPatches.length} lava`);
+  }
 }

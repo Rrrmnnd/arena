@@ -16,7 +16,7 @@ const GUNNER_BULLET_SPEED = 1000; // px/sec while a bullet is in flight
 const GUNNER_DEALT_CHARGE_BONUS = 0.2; // evolve-seconds shaved off per point of damage a bullet actually lands
 const GUNNER_LASER_GROW_DURATION = 0.5; // seconds for the beam to grow from nothing to full width after evolving into it
 const GUNNER_LASER_FIRE_DURATION = 6.84; // seconds the beam fires before overheating — matches the length of the gunnerLaser sfx clip
-const GUNNER_LASER_OVERHEAT_DURATION = 3.5; // seconds the weapon is disabled after a firing cycle ends
+const GUNNER_LASER_OVERHEAT_DURATION = 2.5; // seconds the weapon is disabled after a firing cycle ends
 const GUNNER_ROCKET_EXPLOSION_RADIUS = 150; // splash radius when a rocket detonates
 const GUNNER_ROCKET_SPLASH_DAMAGE = 15; // damage to anyone caught in the blast who wasn't the direct hit
 const GUNNER_ROCKET_RECOIL_STRENGTH = 200; // px/sec knockback impulse kicking the soldier backward on each shot
@@ -32,8 +32,8 @@ function gunnerLerp(a, b, t) {
 const GUNNER_WEAPON_TIERS = [
   { name: "Pistol", fireRate: 2,     damage: 1,  evolveTime: 9.0 },  // Pistol->SMG: was 10.0, -1s
   { name: "SMG",     fireRate: 5.5,  damage: 1,  evolveTime: 13.0 }, // SMG->Rifle: was 15.0, -2s
-  { name: "Rifle",   fireRate: 3,    damage: 5,  evolveTime: 16.0 }, // Rifle->Rocket Launcher: was 18.0, -2s
-  { name: "Rocket Launcher", fireRate: 0.25, damage: 25, evolveTime: 18.0 }, // Rocket Launcher->Laser Cannon: was 20.0, -2s
+  { name: "Rifle",   fireRate: 3,    damage: 4,  evolveTime: 13.0 }, // Rifle->Rocket Launcher: was 16.0, -3s
+  { name: "Rocket Launcher", fireRate: 0.25, damage: 25, evolveTime: 16.0 }, // Rocket Launcher->Laser Cannon: was 18.0, -2s
   { name: "Laser Cannon", isBeam: true, tickDamage: 6, tickInterval: 0.25 },
 ];
 
@@ -557,6 +557,12 @@ class Gunner extends Character {
     return "#66ccff";
   }
 
-  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
-  // character. The ability/cooldown readouts that used to sit under it are gone.
+  // The current weapon, which is the single most useful thing about a Soldier and appears nowhere
+  // else — the bar under the HP is evolve progress, not which gun is in its hands.
+  drawHud(ctx, x, y, w) {
+    const ny = super.drawHud(ctx, x, y, w);
+    const overheated = this.isFinalTier && this.laserOverheated;
+    this.drawHudNote(ctx, x, ny, overheated ? `${this.tier.name} — overheated` : this.tier.name,
+      overheated ? "#ff8866" : "rgba(255,255,255,0.75)");
+  }
 }

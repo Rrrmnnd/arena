@@ -1271,7 +1271,13 @@ class PunchManNew extends Character {
     return this.blitzing || this.chargeTime >= PUNCHMAN2_ULT_CHARGE_TIME ? "#ffd23c" : "#d0483c";
   }
 
-  // No drawHud override: the HUD is deliberately just name + HP bar + ultimate bar for every
-  // character. The ability/cooldown readouts that used to sit under it — including this one's
-  // combo pips — are gone.
+  drawHud(ctx, x, y, w) {
+    const ny = super.drawHud(ctx, x, y, w);
+    if (this.blitzing) {
+      const n = Math.min(this.ultStrikesDone, PUNCHMAN2_ULT_STRIKES);
+      this.drawHudNote(ctx, x, ny, `BLITZ ${n}/${PUNCHMAN2_ULT_STRIKES}`, "#ffd23c");
+    } else if (this.nextPunchIsHeavy) {
+      this.drawHudNote(ctx, x, ny, "HEAVY ready", "#ffd23c");
+    }
+  }
 }
