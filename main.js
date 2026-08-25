@@ -21,7 +21,7 @@ const ROSTER = [
   { label: "Virus", ctor: () => new Virus(0, 0) },
   { label: "Fire Mage", ctor: () => new FireMage(0, 0), excludeFromTwitch: true },
   { label: "Archer", ctor: () => new Archer(0, 0), excludeFromTwitch: true },
-  { label: "Troll", ctor: () => new Troll(0, 0), excludeFromTwitch: true },
+  { label: "Troll", ctor: () => new Troll(0, 0) },
 ];
 
 let gameMode = "1v1"; // "1v1" | "vsboss" — which mode is currently toggled in the setup screen
