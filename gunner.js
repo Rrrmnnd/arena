@@ -33,8 +33,8 @@ const GUNNER_WEAPON_TIERS = [
   { name: "Pistol", fireRate: 2,     damage: 1,  evolveTime: 9.0 },  // Pistol->SMG: was 10.0, -1s
   { name: "SMG",     fireRate: 5.5,  damage: 1,  evolveTime: 13.0 }, // SMG->Rifle: was 15.0, -2s
   { name: "Rifle",   fireRate: 3,    damage: 4,  evolveTime: 13.0 }, // Rifle->Rocket Launcher: was 16.0, -3s
-  { name: "Rocket Launcher", fireRate: 0.25, damage: 25, evolveTime: 16.0 }, // Rocket Launcher->Laser Cannon: was 18.0, -2s
-  { name: "Laser Cannon", isBeam: true, tickDamage: 6, tickInterval: 0.25 },
+  { name: "Rocket Launcher", fireRate: 1 / 3, damage: 20, evolveTime: 20.0 }, // Rocket Launcher->Laser Cannon: was 25dmg/0.25fireRate/16.0s
+  { name: "Laser Cannon", isBeam: true, tickDamage: 8, tickInterval: 0.25 },
 ];
 
 // Each gun has its own firing sound (the generic "gunnerShoot" placeholder was never backed

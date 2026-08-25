@@ -1,27 +1,58 @@
 // Demon: ranged trident-thrower. Holds a trident that visibly tracks the opponent; on attack
 // it winds up with a short thrust animation and hurls that trident, and a fresh one grows back
 // into its hand before the next throw. Since it isn't a homing shot, a moving target can walk
-// out of its path, so it lands in the wall behind them and fades. Every trident that lands
-// sticks in the target; the ultimate detonates every stuck trident at once for a damage burst
-// plus lifesteal, and permanently ramps up the Demon's offense a little each time it's used.
+// out of its path, so it lands in the wall behind them and fades.
+//
+// Every trident that lands sticks in the target, and the third one to stick RIPS ALL THREE OUT
+// at once for a burst of damage. It's a passive, driven purely by accuracy — three hits, no
+// matter how long they took, and no permanent stat gain, no heal, no speed burst either time.
+//
+// Ultimate — Recall: every trident that MISSED and is sitting in a wall tears itself free, rises
+// into a ring overhead, turns on the opponent, and flies home. So the two halves of the kit pull
+// in opposite directions and neither throw is wasted: hits feed the passive, misses arm the
+// ultimate — and landing a rip in turn refunds part of the ultimate's own cooldown. Recalled
+// tridents steer as they fly (an ordinary throw never does), hit for their own (lower) number,
+// and heal half of that back — the ONLY place lifesteal lives in this kit now — and embed on
+// contact like any other, which usually means the volley itself sets off the passive.
 
-const DEMON_MAX_HP          = 100;   // glass cannon: least HP on the roster
-const DEMON_MAX_OVERFLOW_HP = 50;    // heals (from landed throws or the ultimate) can push HP past maxHp, up to this much
+const DEMON_MAX_HP          = 105;
 const DEMON_SPEED           = 280;
-const DEMON_ATTACK_COOLDOWN = 1.25;  // seconds between throws (base, before ultimate stacking)
-const DEMON_MIN_ATTACK_COOLDOWN = 0.1; // floor so ultimate stacking can't shrink it to zero
-const DEMON_ATTACK_DAMAGE   = 5;     // base damage per trident that lands
+const DEMON_ATTACK_COOLDOWN = 1.0;   // seconds between throws
+const DEMON_ATTACK_DAMAGE   = 4;     // damage per trident that lands on an ordinary throw
 const DEMON_SELF_DAMAGE_PER_THROW = 2;   // HP the Demon pays for every trident it throws — this alone can never kill it
 const DEMON_HIT_HP_RETURN         = 2.5; // HP recovered when a thrown trident actually lands (net +0.5 on a hit, -2 on a miss)
 const DEMON_TRIDENT_SPEED   = 1300;  // px/sec while in flight — faster flight = smaller dodge window = higher hit chance
 const DEMON_KNOCKBACK_STRENGTH = 70;  // px/sec impulse on a base-size (60) target; scales inversely with the target's size
-const DEMON_MISS_FADE_TIME  = 2.0;   // seconds a wall-stuck (missed) trident lingers before vanishing
-const DEMON_ULTIMATE_CHARGE_STEPS = 10; // throws needed to fill the ultimate meter, hit or miss — not time-based
-const DEMON_ULTIMATE_DETONATE_DAMAGE   = 9;    // base damage per stuck trident when the ultimate fires
-const DEMON_ULTIMATE_HEAL_RATIO        = 0.5;  // fraction of ultimate damage healed back per trident
-const DEMON_ULTIMATE_SPEED_BOOST_DURATION = 2.0;  // seconds of 2x movement speed right after the ultimate fires
-const DEMON_ULTIMATE_COOLDOWN_REDUCTION   = 0.25; // permanent attack-cooldown reduction, stacking per ultimate use
-const DEMON_ULTIMATE_DAMAGE_BONUS         = 1;    // permanent bonus to all damage dealt, stacking per ultimate use
+// Missed tridents no longer rot away on a timer — they're the ultimate's ammunition now, so they
+// stay in the wall until Recall comes for them. Capped instead of timed: past this many, the
+// oldest one fades out, which keeps a long round from papering the arena in tridents.
+const DEMON_WALL_TRIDENT_CAP = 10;
+const DEMON_MISS_FADE_TIME   = 0.6; // only used for the oldest one being pushed out past the cap
+
+// The passive: three tridents stuck in the target is the trigger, not a meter.
+const DEMON_RIP_TRIDENT_COUNT = 3;
+const DEMON_RIP_DAMAGE        = 4;    // damage per trident ripped out
+// Healed once per rip, not once per trident — the passive always rips DEMON_RIP_TRIDENT_COUNT
+// at a time, so per-trident would be three times this every time it fires.
+const DEMON_RIP_HEAL          = 3;
+
+// Ultimate — Recall. Holds (rather than firing into nothing) while no trident is stuck in a wall,
+// the same way Fire Mage's eruption waits for lava.
+const DEMON_ULT_COOLDOWN     = 15.0;
+const DEMON_ULT_RIP_REFUND   = 2.0;  // seconds knocked off the cooldown every time the passive fires
+const DEMON_ULT_GATHER       = 0.9;  // wall tridents tear free and rise into a ring overhead
+const DEMON_ULT_AIM          = 0.35; // the ring hangs, turns on the target, and shivers
+const DEMON_ULT_RING_RADIUS  = 116;  // how wide the ring hovers
+// High enough to clear the Demon's own body. The trident sprite is ~95px long, so a ring hung
+// any closer just piles them across the character and the formation stops reading as a ring.
+const DEMON_ULT_RING_HEIGHT  = 178;
+const DEMON_ULT_RING_SQUASH  = 0.42; // flattens the ring into an ellipse, so it reads as lying flat
+const DEMON_ULT_RING_MARGIN  = 100;  // clearance kept between the ring and the arena wall
+const DEMON_ULT_SPEED        = 1050; // px/sec once they launch
+const DEMON_ULT_HOMING       = 7.5;  // rad/sec of steering in flight — an ordinary throw has none
+const DEMON_ULT_HIT_DAMAGE   = 2;    // damage per RECALLED trident that lands — its own number, not DEMON_ATTACK_DAMAGE
+const DEMON_ULT_HEAL_RATIO   = 0.5;  // fraction of that damage paid back as HP, per recalled hit that lands
+const DEMON_ULT_STAGGER      = 0.05; // seconds between each trident launching, so it reads as a volley
 
 const DEMON_THROW_WINDUP     = 0.15; // seconds of thrust animation before the trident actually launches
 const DEMON_HELD_REGEN_TIME  = 0.3;  // seconds for a fresh trident to grow back into the hand after a throw
@@ -57,6 +88,15 @@ class Trident {
     this.offsetAngle = 0; // where around the target's perimeter this one is stuck, once embedded
     this.fadeTimer = 0;
     this.life = 3.0; // safety timeout, in case it somehow never reaches a wall
+    // Set while this one is part of a Recall — see Demon.updateRecall
+    this.recall = null; // { fromX, fromY, slot, spin, launchAt }
+    this.homing = false;
+    // The BufferSource of its own woosh loop, for however long IT is flying home during a
+    // Recall — see Demon.updateTridents. Only ever set for a recalled (homing) trident; an
+    // ordinary throw stays silent here. Per-trident rather than one shared loop (contrast Fire
+    // Mage's lava ambience) because a whole volley can be in flight together, and each should
+    // sound like its own object moving, not one sound standing in for all of them.
+    this.woosh = null;
   }
 }
 
@@ -89,16 +129,16 @@ class Demon extends Character {
     });
 
     this.attackTimer = 0;
-    this.chargeSteps = 0; // 0..DEMON_ULTIMATE_CHARGE_STEPS, +1 per throw regardless of hit/miss
     this.tridents = []; // every trident thrown this round: flying, embedded, or stuck-in-wall
 
     this.aimAngle = 0;          // direction the held trident (and the next throw) faces
     this.throwWindup = 0;       // >0 during the brief thrust animation before a throw launches
     this.heldTridentScale = 1;  // 0..1 pop-in scale for the trident regrowing in hand after a throw
 
-    this.speedBoostTimer = 0;      // >0 for a burst of movement speed right after using the ultimate
-    this.attackCooldownBonus = 0;  // permanent cooldown reduction banked from past ultimate uses
-    this.bonusDamage = 0;          // permanent damage bonus banked from past ultimate uses
+    this.ultimateCooldown = DEMON_ULT_COOLDOWN;
+    this.ultPhase = null;  // null | "gather" | "aim" | "strike" — see updateRecall
+    this.ultTimer = 0;
+
 
     this.celebratingVictory = false; // true once it's won: flies at the screen until it fills it, laughing
     this.victoryTimer = 0;
@@ -129,107 +169,26 @@ class Demon extends Character {
     return this.tridents.filter((t) => t.state === "embedded");
   }
 
-  get effectiveAttackCooldown() {
-    return Math.max(DEMON_MIN_ATTACK_COOLDOWN, DEMON_ATTACK_COOLDOWN - this.attackCooldownBonus);
+  // Tridents sitting in a wall, i.e. Recall's ammunition
+  get wallTridents() {
+    return this.tridents.filter((t) => t.state === "stuck");
   }
 
-  get effectiveAttackDamage() {
-    return DEMON_ATTACK_DAMAGE + this.bonusDamage;
-  }
 
-  // Shared math for both the floating field bar and the HUD panel bar: the bar's full width
-  // represents maxHp + the overflow cap. The 0..maxHp portion keeps the normal green/yellow/
-  // red health-percentage coloring; only the banked-overflow portion past that line is drawn
-  // in a separate, distinct red — not the whole bar going gold.
-  get hpBarInfo() {
-    const cap = this.maxHp + DEMON_MAX_OVERFLOW_HP;
-    const normalMarkRatio = this.maxHp / cap; // where the maxHp line sits along the full bar width
-    const hpRatio = this.hp / this.maxHp; // can exceed 1 while overflowing
-    const baseFillRatio = Math.max(0, Math.min(1, hpRatio));
-    const overflow = Math.max(0, this.hp - this.maxHp);
-    const overflowFillRatio = Math.max(0, Math.min(1, overflow / DEMON_MAX_OVERFLOW_HP));
-    const overflowing = overflow > 0;
-    const baseColor = hpRatio > 0.5 ? "#50f050" : hpRatio > 0.3 ? "#ffc832" : "#ff3c3c";
-    return { normalMarkRatio, baseFillRatio, overflowFillRatio, overflowing, baseColor };
-  }
-
-  // Draws the two-segment bar (normal HP + banked overflow) into an arbitrary box — shared by
-  // both the floating field bar and the HUD panel bar, which only differ in position/size.
-  drawSegmentedHpBar(ctx, barX, barY, barW, barH) {
-    const { normalMarkRatio, baseFillRatio, overflowFillRatio, baseColor } = this.hpBarInfo;
-    const baseSegW = barW * normalMarkRatio;
-    const overflowSegW = barW - baseSegW;
-
-    ctx.fillStyle = "#1e1e23";
-    ctx.fillRect(barX, barY, barW, barH);
-
-    ctx.fillStyle = baseColor;
-    ctx.fillRect(barX, barY, baseSegW * baseFillRatio, barH);
-
-    if (overflowFillRatio > 0) {
-      ctx.fillStyle = "#ff2020"; // vivid red for banked overflow HP, distinct from the low-HP warning red
-      ctx.fillRect(barX + baseSegW, barY, overflowSegW * overflowFillRatio, barH);
-    }
-
-    ctx.strokeStyle = "rgba(255,255,255,0.5)";
-    ctx.lineWidth = 1;
-    const markX = barX + baseSegW;
-    ctx.beginPath();
-    ctx.moveTo(markX, barY);
-    ctx.lineTo(markX, barY + barH);
-    ctx.stroke();
-
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(barX, barY, barW, barH);
-  }
-
+  // The bar is Recall's cooldown, matching what the same slot means for everyone else. The
+  // passive's progress is the HUD line underneath instead — see drawHud.
   get ultimateRatio() {
-    return this.chargeSteps / DEMON_ULTIMATE_CHARGE_STEPS;
+    if (this.ultPhase) return 1;
+    return Math.max(0, Math.min(1, 1 - this.ultimateCooldown / DEMON_ULT_COOLDOWN));
   }
 
   get ultimateBarColor() {
     return "#ff3050";
   }
 
-  // Overrides the base floating field bar so it can show banked overflow HP too — see
-  // drawSegmentedHpBar/hpBarInfo.
-  drawFieldHpBar(ctx) {
-    const barW = Math.max(70, this.size * 0.9);
-    const barX = this.x - barW / 2;
-    const barY = this.y - this.size / 2 - 22;
-    this.drawSegmentedHpBar(ctx, barX, barY, barW, 10);
-
-    ctx.fillStyle = this.hpBarInfo.overflowing ? "#ff2020" : "#ffffff";
-    ctx.font = "12px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(`${Math.ceil(this.hp)}/${this.maxHp}`, this.x, barY - 4);
-
-    this.drawBar(ctx, barX, barY + 10 + 4, barW, 6, this.ultimateRatio, this.ultimateBarColor, 1);
-  }
-
-  // Landed throws and the ultimate's lifesteal can push HP past maxHp now, up to
-  // DEMON_MAX_OVERFLOW_HP banked on top — the base Character.heal() clamps to maxHp exactly,
-  // so this overrides that cap instead of raising it globally for every character.
-  heal(amount) {
-    if (amount <= 0 || !this.alive) return;
-    const cap = this.maxHp + DEMON_MAX_OVERFLOW_HP;
-    const before = this.hp;
-    this.hp = Math.min(cap, this.hp + amount);
-    const healed = this.hp - before;
-    if (healed > 0) spawnDamageNumber(this.x, this.y, healed, false, true);
-  }
-
   onDeath() {
     super.onDeath();
     this.tridents = this.tridents.filter((t) => t.state !== "embedded"); // can't detonate anymore
-  }
-
-  // Ultimate payoff includes a temporary 2x speed burst — scale dt while it's active rather
-  // than touching this.speed/vx/vy permanently, same trick Punch Man's rage mode uses.
-  moveAndBounce(dt) {
-    const mult = this.speedBoostTimer > 0 ? 2 : 1;
-    return super.moveAndBounce(dt * mult);
   }
 
   update(dt, opponent) {
@@ -242,7 +201,6 @@ class Demon extends Character {
       return;
     }
 
-    if (this.speedBoostTimer > 0) this.speedBoostTimer -= dt;
     if (this.heldTridentScale < 1) this.heldTridentScale = Math.min(1, this.heldTridentScale + dt / DEMON_HELD_REGEN_TIME);
 
     if (this.stunTimer > 0) { this.updateTridents(dt, opponent); return; }
@@ -259,16 +217,155 @@ class Demon extends Character {
       if (this.throwWindup <= 0) this.launchTrident(opponent);
     } else if (opponent && opponent.alive && this.attackTimer <= 0 && this.heldTridentScale >= 1 && this.canAttack) {
       this.throwWindup = DEMON_THROW_WINDUP;
-      this.attackTimer += this.effectiveAttackCooldown;
+      this.attackTimer += DEMON_ATTACK_COOLDOWN;
       playSfx("demonThrow", 0.45);
     }
 
-    // In-flight tridents get a chance to land (and embed) before the ultimate check below,
-    // so a throw that fills the meter can still count toward its own detonation if it hits.
+    // Recall. Holds rather than firing while there's nothing stuck in a wall to call back, so a
+    // perfectly accurate Demon simply never has it up — which is the trade for the passive
+    // already rewarding accuracy.
+    if (this.ultimateCooldown > 0) this.ultimateCooldown -= dt;
+    if (!this.ultPhase && this.ultimateCooldown <= 0 && this.canAttack &&
+        opponent && opponent.alive && this.wallTridents.length > 0) {
+      this.beginRecall();
+    }
+    if (this.ultPhase) this.updateRecall(dt, opponent);
+
+    // Tridents land (and embed) before the passive is checked, so the third hit rips on the same
+    // frame it lands rather than a frame later.
     this.updateTridents(dt, opponent);
 
-    // Ultimate: an entirely separate step from throwing — fires the instant the meter is full.
-    if (this.chargeSteps >= DEMON_ULTIMATE_CHARGE_STEPS) this.detonate(opponent);
+    // The passive: the third trident to stick tears all three back out.
+    if (this.embeddedTridents.length >= DEMON_RIP_TRIDENT_COUNT) this.ripTridents(opponent);
+  }
+
+  // ---------------------------------------------------------------- Recall
+  //
+  // Three beats: the wall tridents tear free and rise into a ring overhead (gather), the ring
+  // hangs and turns on the target (aim), then they launch one after another a few frames apart
+  // (strike) so it lands as a volley rather than a single wall of spears.
+
+  beginRecall() {
+    const wall = this.wallTridents;
+    this.ultPhase = "gather";
+    this.ultTimer = 0;
+    this.ultimateCooldown = DEMON_ULT_COOLDOWN;
+
+    wall.forEach((t, i) => {
+      t.recall = {
+        fromX: t.x,
+        fromY: t.y,
+        fromAngle: t.angle,
+        slot: (i / wall.length) * Math.PI * 2,
+        // Staggered launch, so the volley arrives as a stream instead of all on one frame
+        launchAt: i * DEMON_ULT_STAGGER,
+      };
+      t.state = "recalled";
+      spawnImpactParticles(t.x, t.y, ["#ff2020", "#8a0000"], 8, 1.0, 0);
+    });
+
+    triggerShake(7, 0.3);
+    playSfx("demonUltimate", 0.75);
+  }
+
+  // Where the ring hangs. Nominally straight up from the Demon, but clamped so the whole
+  // formation stays inside the arena: hung blindly overhead, a Demon fighting near the top wall
+  // put the entire ring outside the arena, which read as a pile of tridents stuck to the
+  // outside of the wall rather than as its own ultimate winding up.
+  //
+  // The margin accounts for the sprite as well as the ring itself — a trident is drawn trailing
+  // ~95px back from its anchor, so a ring sitting exactly on the boundary still hangs over it.
+  get recallRingCentre() {
+    const ry = DEMON_ULT_RING_RADIUS * DEMON_ULT_RING_SQUASH;
+    const padX = DEMON_ULT_RING_RADIUS + DEMON_ULT_RING_MARGIN;
+    const padY = ry + DEMON_ULT_RING_MARGIN;
+    return {
+      x: Math.min(ARENA.x + ARENA.w - ARENA_BORDER - padX,
+         Math.max(ARENA.x + ARENA_BORDER + padX, this.x)),
+      y: Math.min(ARENA.y + ARENA.h - ARENA_BORDER - padY,
+         Math.max(ARENA.y + ARENA_BORDER + padY, this.y - DEMON_ULT_RING_HEIGHT)),
+    };
+  }
+
+  // Where a recalled trident hovers in the ring at a given moment. The ring turns slowly, so the
+  // formation reads as alive rather than as a frozen decal pinned over the Demon.
+  recallSlotPoint(t, spin) {
+    const a = t.recall.slot + spin;
+    const c = this.recallRingCentre;
+    return {
+      x: c.x + Math.cos(a) * DEMON_ULT_RING_RADIUS,
+      y: c.y + Math.sin(a) * DEMON_ULT_RING_RADIUS * DEMON_ULT_RING_SQUASH,
+    };
+  }
+
+  updateRecall(dt, opponent) {
+    this.ultTimer += dt;
+    const spin = this.ultTimer * 2.2;
+
+    if (this.ultPhase === "gather") {
+      const f = Math.min(1, this.ultTimer / DEMON_ULT_GATHER);
+      const ease = f * f * (3 - 2 * f); // smoothstep, so they pull free rather than snapping across
+      for (const t of this.tridents) {
+        if (t.state !== "recalled") continue;
+        const slot = this.recallSlotPoint(t, spin);
+        t.x = t.recall.fromX + (slot.x - t.recall.fromX) * ease;
+        t.y = t.recall.fromY + (slot.y - t.recall.fromY) * ease;
+        // Spins up as it rises, ending pointing outward along its own slot
+        t.angle = t.recall.fromAngle + ease * (Math.PI * 4) + f * 0.001;
+      }
+      if (this.ultTimer >= DEMON_ULT_GATHER) {
+        this.ultPhase = "aim";
+        this.ultTimer = 0;
+      }
+      return;
+    }
+
+    if (this.ultPhase === "aim") {
+      const shiver = Math.sin(this.ultTimer * 60) * 3;
+      for (const t of this.tridents) {
+        if (t.state !== "recalled") continue;
+        const slot = this.recallSlotPoint(t, spin);
+        t.x = slot.x + shiver;
+        t.y = slot.y;
+        // All of them swing round to point at the target, quivering on the spot
+        if (opponent && opponent.alive) t.angle = Math.atan2(opponent.y - t.y, opponent.x - t.x);
+      }
+      if (this.ultTimer >= DEMON_ULT_AIM) {
+        this.ultPhase = "strike";
+        this.ultTimer = 0;
+      }
+      return;
+    }
+
+    // strike: each launches on its own beat, then flies as a normal (but steering) trident
+    let stillHeld = false;
+    for (const t of this.tridents) {
+      if (t.state !== "recalled") continue;
+      if (this.ultTimer < t.recall.launchAt) {
+        stillHeld = true;
+        const slot = this.recallSlotPoint(t, spin);
+        t.x = slot.x;
+        t.y = slot.y;
+        if (opponent && opponent.alive) t.angle = Math.atan2(opponent.y - t.y, opponent.x - t.x);
+        continue;
+      }
+      const a = opponent && opponent.alive
+        ? Math.atan2(opponent.y - t.y, opponent.x - t.x)
+        : t.angle;
+      t.angle = a;
+      t.vx = Math.cos(a) * DEMON_ULT_SPEED;
+      t.vy = Math.sin(a) * DEMON_ULT_SPEED;
+      t.state = "flying";
+      t.homing = true;      // steers on the way in, unlike an ordinary throw
+      t.life = 3.0;
+      t.recall = null;
+      spawnImpactParticles(t.x, t.y, ["#ff4040", "#ffffff"], 6, 1.2, 0);
+      playSfx("demonThrow", 0.35);
+    }
+    if (!stillHeld) {
+      this.ultPhase = null;
+      this.ultTimer = 0;
+    }
   }
 
   updateVictoryZoom(dt) {
@@ -293,11 +390,37 @@ class Demon extends Character {
     const y = this.y + Math.sin(this.aimAngle) * tipDist;
     this.tridents.push(new Trident(x, y, this.aimAngle));
     this.heldTridentScale = 0; // starts regrowing next frame
-    this.chargeSteps = Math.min(DEMON_ULTIMATE_CHARGE_STEPS, this.chargeSteps + 1);
 
     // Every throw costs a little HP, but never enough to kill on its own — clamped to leave 1 HP.
     const selfDmg = Math.min(DEMON_SELF_DAMAGE_PER_THROW, this.hp - 1);
     if (selfDmg > 0) this.takeDamage(selfDmg);
+  }
+
+  // Wall tridents are Recall's ammunition and don't expire on their own, so the only thing
+  // keeping the arena from silting up is this: past the cap, the oldest still-waiting one starts
+  // fading. Ones already caught up in a Recall are left alone.
+  enforceWallCap() {
+    const waiting = this.tridents.filter((t) => t.state === "stuck" && t.fadeTimer <= 0);
+    for (let i = 0; i < waiting.length - DEMON_WALL_TRIDENT_CAP; i++) {
+      waiting[i].fadeTimer = DEMON_MISS_FADE_TIME;
+    }
+  }
+
+  // Stops one trident's own woosh loop, if it has one. Safe to call on a trident that never had
+  // one (nothing happens) or one that's already been stopped (t.woosh is already null).
+  stopWoosh(t) {
+    if (!t.woosh) return;
+    try { t.woosh.stop(); } catch (e) {}
+    t.woosh = null;
+  }
+
+  // Stops every trident's woosh loop unconditionally, mid-flight or not. Only ever needed when
+  // this Demon itself is about to be discarded (round reset/re-pick) — see main.js's reset().
+  // Without this, any trident still flying at that moment leaves its BufferSource playing with
+  // nothing left holding a reference able to stop it, looping forever (the same class of leak
+  // stopFiremageLavaLoop exists to prevent for Fire Mage's lava ambience).
+  stopAllTridentSounds() {
+    for (const t of this.tridents) this.stopWoosh(t);
   }
 
   updateTridents(dt, opponent) {
@@ -305,15 +428,40 @@ class Demon extends Character {
       const t = this.tridents[i];
 
       if (t.state === "flying") {
+        // Recall's tridents only — t.homing is true for exactly those (see updateRecall), false
+        // for an ordinary throw. Started the first frame it's seen flying, idempotent (once
+        // t.woosh is set it stays set), so this only ever fires once per trident.
+        if (t.homing && !t.woosh) t.woosh = playSfx("demonTridentWoosh", 0.5, 0.08, 0, true);
+
         t.life -= dt;
+        // Only recalled tridents steer. A normal throw is committed the moment it leaves the
+        // hand — that "a moving target can walk out of the way" is the whole reason misses exist,
+        // and misses are what arm Recall in the first place.
+        if (t.homing && opponent && opponent.alive) {
+          const want = Math.atan2(opponent.y - t.y, opponent.x - t.x);
+          let d = want - t.angle;
+          d = Math.atan2(Math.sin(d), Math.cos(d)); // shortest way round
+          const step = Math.max(-DEMON_ULT_HOMING * dt, Math.min(DEMON_ULT_HOMING * dt, d));
+          t.angle += step;
+          t.vx = Math.cos(t.angle) * DEMON_ULT_SPEED;
+          t.vy = Math.sin(t.angle) * DEMON_ULT_SPEED;
+        }
         t.x += t.vx * dt;
         t.y += t.vy * dt;
 
         if (opponent && opponent.alive) {
           const dist = Math.hypot(opponent.x - t.x, opponent.y - t.y);
           if (dist <= opponent.size / 2 + 6) {
-            opponent.takeDamage(this.effectiveAttackDamage);
-            this.heal(DEMON_HIT_HP_RETURN); // a landed throw pays back more than it cost
+            // A recalled trident hits for its own (lower) number and pays back half of it as
+            // HP — Recall's whole payoff, now that the passive it used to share a number with
+            // doesn't heal at all. An ordinary throw keeps its old flat regen.
+            if (t.homing) {
+              opponent.takeDamage(DEMON_ULT_HIT_DAMAGE);
+              this.heal(DEMON_ULT_HIT_DAMAGE * DEMON_ULT_HEAL_RATIO);
+            } else {
+              opponent.takeDamage(DEMON_ATTACK_DAMAGE);
+              this.heal(DEMON_HIT_HP_RETURN); // a landed throw pays back more than it cost
+            }
 
             // A slight shove in the direction it was traveling — bigger targets barely budge,
             // smaller ones get bumped a bit more.
@@ -321,8 +469,10 @@ class Demon extends Character {
             opponent.applyKnockback(Math.cos(t.angle), Math.sin(t.angle), kb);
 
             t.state = "embedded";
+            t.homing = false;
             t.target = opponent;
             t.offsetAngle = Math.random() * Math.PI * 2;
+            this.stopWoosh(t);
             playSfx("demonHit", 0.5);
             continue;
           }
@@ -337,24 +487,35 @@ class Demon extends Character {
           t.x = Math.min(right, Math.max(left, t.x));
           t.y = Math.min(bottom, Math.max(top, t.y));
           t.state = "stuck";
-          t.fadeTimer = DEMON_MISS_FADE_TIME;
+          t.homing = false;
+          t.fadeTimer = 0; // 0 means "waiting in the wall indefinitely" — see enforceWallCap
+          this.stopWoosh(t);
         }
-      } else if (t.state === "stuck") {
+      } else if (t.state === "stuck" && t.fadeTimer > 0) {
+        // Only ever counting down for one being pushed out past the cap
         t.fadeTimer -= dt;
         if (t.fadeTimer <= 0) this.tridents.splice(i, 1);
       }
-      // embedded tridents live until detonate() clears them (or the round resets)
+      // embedded and recalled tridents live until the passive or Recall clears them
     }
+    // Runs after the loop, not before it: a trident that buries itself in the wall THIS frame has
+    // to be counted this frame, otherwise the cap sits one over until the next one.
+    this.enforceWallCap();
   }
 
-  detonate(opponent) {
+  // Fires the moment DEMON_RIP_TRIDENT_COUNT tridents are stuck in the target — see update().
+  // Damage plus a partial heal; no banked stat gain and no speed burst — as a passive it comes
+  // around several times a round on its own, and both compounded far too fast on top of that.
+  ripTridents(opponent) {
     const stuck = this.embeddedTridents;
     if (opponent && opponent.alive && stuck.length > 0) {
-      const dmgPerTrident = DEMON_ULTIMATE_DETONATE_DAMAGE + this.bonusDamage;
+      const dmgPerTrident = DEMON_RIP_DAMAGE;
       for (const t of stuck) {
         opponent.takeDamage(dmgPerTrident);
-        this.heal(dmgPerTrident * DEMON_ULTIMATE_HEAL_RATIO);
       }
+
+      this.heal(DEMON_RIP_HEAL);
+
       // One huge blood burst as every trident rips back out at once, scaled by how many landed.
       spawnImpactParticles(opponent.x, opponent.y, ["#c40000", "#8a0000", "#ff2020", "#500000"], 26 + stuck.length * 10, 2.4, 170);
       spawnFlash(opponent.x, opponent.y, "#ff2020", 100 + stuck.length * 6, 0.5);
@@ -362,15 +523,10 @@ class Demon extends Character {
       playSfx("demonUltimate", 0.8);
     }
     this.tridents = this.tridents.filter((t) => t.state !== "embedded");
-    this.chargeSteps = 0;
 
-    // Payoff for using the ultimate: a brief speed burst, plus a permanent stacking buff.
-    this.speedBoostTimer = DEMON_ULTIMATE_SPEED_BOOST_DURATION;
-    this.attackCooldownBonus = Math.min(
-      DEMON_ATTACK_COOLDOWN - DEMON_MIN_ATTACK_COOLDOWN,
-      this.attackCooldownBonus + DEMON_ULTIMATE_COOLDOWN_REDUCTION
-    );
-    this.bonusDamage += DEMON_ULTIMATE_DAMAGE_BONUS;
+    // Landing hits brings Recall forward. The two halves of the kit feed each other: misses give
+    // it ammunition, hits give it back sooner.
+    this.ultimateCooldown = Math.max(0, this.ultimateCooldown - DEMON_ULT_RIP_REFUND);
   }
 
   drawTridents(ctx) {
@@ -386,8 +542,11 @@ class Demon extends Character {
         const stuckAngle = t.offsetAngle + Math.PI;
         drawTridentShape(ctx, ex, ey, stuckAngle, 0.75, 1);
       } else if (t.state === "stuck") {
-        const alpha = Math.max(0, t.fadeTimer / DEMON_MISS_FADE_TIME);
+        // fadeTimer 0 means it's waiting in the wall indefinitely, not that it's already gone
+        const alpha = t.fadeTimer > 0 ? Math.max(0, t.fadeTimer / DEMON_MISS_FADE_TIME) : 1;
         drawTridentShape(ctx, t.x, t.y, t.angle, 1, alpha);
+      } else if (t.state === "recalled") {
+        drawTridentShape(ctx, t.x, t.y, t.angle, 1, 1);
       }
     }
   }
@@ -467,39 +626,14 @@ class Demon extends Character {
     this.drawBody(ctx, x, y, size, wingFlapScale);
   }
 
-  // Overrides the base name+HP-bar panel (rather than calling super.drawHud()) so the bar can
-  // show banked overflow HP past the normal cap — see hpBarInfo.
-  // Doesn't call super.drawHud() — the segmented overflow HP bar needs its own drawing code —
-  // but still follows the same fixed order the base does: name, HP bar, ultimate bar, and
-  // nothing after that.
+  // No overflow cap left to show, so this is the same pattern every other character uses: the
+  // base name+HP-bar+ultimate-bar panel, plus one status line — progress toward the passive,
+  // spelled out as an exact count since the bar alone would only round it to a fraction.
   drawHud(ctx, x, y, w) {
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#ffffff";
-    ctx.font = hudNameFont();
-    ctx.fillText(this.alive ? this.name : `${this.name} (Defeated)`, x, y);
-
-    const barH = 18;
-    const barY = y + 14;
-    this.drawSegmentedHpBar(ctx, x, barY, w, barH);
-
-    ctx.fillStyle = this.hpBarInfo.overflowing ? "#ff2020" : "rgba(255,255,255,0.85)";
-    ctx.font = "13px Arial";
-    ctx.textAlign = "right";
-    ctx.fillText(`${Math.ceil(this.hp)}/${this.maxHp}`, x + w, barY - 4);
-    ctx.textAlign = "left";
-
-    const ny = barY + barH + 14;
-
-    const ultBarH = 10;
-    const ultBarY = ny - 10;
-    this.drawBar(ctx, x, ultBarY, w, ultBarH, this.ultimateRatio, this.ultimateBarColor, 1);
-    const bottom = ultBarY + ultBarH + 16;
-
-    // How many tridents are stuck in the opponent is what the ultimate detonates, so it's the one
-    // number worth showing — the bar above is just the meter filling.
+    const ny = super.drawHud(ctx, x, y, w);
     if (this.embeddedTridents.length) {
-      this.drawHudNote(ctx, x, bottom, `${this.embeddedTridents.length} stuck`, "#ff8a8a");
+      this.drawHudNote(ctx, x, ny,
+        `${this.embeddedTridents.length}/${DEMON_RIP_TRIDENT_COUNT} tridents`, "#ff8a8a");
     }
-    return bottom;
   }
 }

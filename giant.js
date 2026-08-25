@@ -115,6 +115,11 @@ class Giant extends Character {
     this.chargeAttackCooldown = GIANT_CHARGE_ATTACK_COOLDOWN;
   }
 
+  // The dash speed IS the charge — left alone until it ends, hits, or rams a wall.
+  get restoreSpeed() {
+    return this.isCharging ? null : super.restoreSpeed;
+  }
+
   launchCharge() {
     this.isWindingUp = false;
     this.isCharging = true;

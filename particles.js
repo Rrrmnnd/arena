@@ -195,6 +195,28 @@ function spawnImpactParticles(x, y, color = "#ffcf6b", count = 10, scale = 1, gr
   }
 }
 
+// A burst thrown along one direction instead of scattering evenly, for hits that visibly send
+// the target somewhere — the debris trails off the way they're going, which is what makes a
+// shove read as a launch rather than just a hit that happens to move them. `spread` is the
+// half-angle of the cone (radians).
+function spawnDirectionalBurst(x, y, angle, spread, color = "#ffcf6b", count = 14, scale = 1) {
+  const palette = Array.isArray(color) ? color : [color];
+  for (let i = 0; i < count; i++) {
+    const a = angle + (Math.random() * 2 - 1) * spread;
+    // Biased toward the fast end so the leading edge of the burst outruns the rest
+    const speed = (260 + Math.random() * Math.random() * 900) * scale;
+    const c = palette[Math.floor(Math.random() * palette.length)];
+    const pt = new Particle(x, y, c, scale, 0);
+    pt.vx = Math.cos(a) * speed;
+    pt.vy = Math.sin(a) * speed;
+    pt.size = (1.4 + Math.random() * 2.2) * scale;
+    pt.life = pt.maxLife = (0.24 + Math.random() * 0.26) * Math.max(1, scale);
+    pt.shape = "circle";
+    pt.glow = true;
+    particles.push(pt);
+  }
+}
+
 // A one-shot puff of smoke — a handful of soft overlapping grey blobs that bloom outward and
 // fade over `duration` seconds — for a "poof" transformation moment (e.g. the Ninja's Shadow
 // Clone appearing), as opposed to spawnImpactParticles' scattering sparks. Not a persistent,

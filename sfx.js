@@ -51,6 +51,7 @@ loadSfx("giantWin", "sfx_giant_win.mp3");
 loadSfx("giantChargeHit", "sfx_giant_charge_hit.mp3");
 loadSfx("wallSlam", "sfx_wall_slam.mp3");
 loadSfx("punchmanUltimate", "sfx_punchman_ultimate.mp3");
+loadSfx("demonTridentWoosh", "sfx_demon_trident_woosh.mp3"); // Recall only, not an ordinary throw — looped per trident for exactly as long as IT is flying home; see Demon.updateTridents
 loadSfx("demonThrow", "sfx_demon_throw.mp3");
 loadSfx("demonUltimate", "sfx_demon_ultimate.mp3");
 loadSfx("demonHit", "sfx_demon_hit.mp3");
@@ -100,6 +101,12 @@ loadSfx("archerUltCharge", "sfx_archer_arcultcharge.mp3"); // the five-second Su
 loadSfx("archerBowShotSun", "sfx_archer_bowshotsun.mp3");  // the ultimate's arrow going up
 loadSfx("archerSundown", "sfx_archer_sundown.mp3");     // the sun falling — see archer.js for how it's timed
 loadSfx("archerSunCrash", "sfx_archer_suncrash.mp3");   // the sun landing
+loadSfx("trollRoar", "sfx_troll_roar.mp3");   // RAMPAGE: the 4.96s clip outlives the 1.3s rooted roar and plays on over the start of the rampage
+loadSfx("trollWave", "sfx_troll_wave.mp3");         // the club starting to move, both the ordinary sweep and the rampage overhead
+loadSfx("trollHit", "sfx_troll_hit.mp3");           // the sweep connecting with a target
+loadSfx("trollUltHit", "sfx_troll_ult_hit.mp3");    // the rampage's overhead driving into the ground
+loadSfx("trollSnore", "sfx_troll_snore.mp3");       // looped for the whole of the post-rampage sleep — see Troll.updateUltimate
+loadSfx("trollPullout", "sfx_troll_pullout.mp3");   // the club coming back out of the floor at the end of the "stuck" phase
 
 // Browsers suspend AudioContext until a user gesture unlocks it
 function unlockAudio() {

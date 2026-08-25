@@ -21,6 +21,7 @@ const ROSTER = [
   { label: "Virus", ctor: () => new Virus(0, 0) },
   { label: "Fire Mage", ctor: () => new FireMage(0, 0), excludeFromTwitch: true },
   { label: "Archer", ctor: () => new Archer(0, 0), excludeFromTwitch: true },
+  { label: "Troll", ctor: () => new Troll(0, 0), excludeFromTwitch: true },
 ];
 
 let gameMode = "1v1"; // "1v1" | "vsboss" — which mode is currently toggled in the setup screen
@@ -59,6 +60,15 @@ let twitchRoundActive = false; // true for the duration of a round started by tr
 let shakeMagnitude = 0;
 let shakeTimer = 0;
 let shakeRoll = 0; // current rotational kick (radians) — big hits twist the frame, not just slide it
+let shakeAngle = 0; // the axis this kick rings along, picked once per shake event
+let shakePhase = 0; // advances with TIME, so consecutive frames are points on one continuous path
+
+// The shake used to be white noise: a fresh (Math.random()*2-1) * magnitude offset every frame,
+// uncorrelated with the last one. At magnitude 15 that put up to 30px of jump between
+// consecutive frames in a random direction, which the eye cannot integrate into motion — it
+// reads as the picture stuttering, not as a camera being hit. It rings down along one axis now.
+const SHAKE_FREQ  = 38;      // rad/s. Fast enough to rattle, slow enough for the eye to track.
+const SHAKE_DECAY = 0.0009;  // per second; pow(SHAKE_DECAY, 1/60) == 0.89, matching the old feel
 
 // Hit-stop: the single biggest "weight" cue in an action game — the whole simulation holds
 // still for a few frames the instant a heavy blow connects, so the eye reads impact instead of
@@ -73,12 +83,30 @@ function triggerHitStop(seconds) {
   hitStopTimer = Math.max(hitStopTimer, Math.min(seconds, HITSTOP_MAX_SECONDS));
 }
 
-function triggerShake(magnitude, duration) {
+// `sustained` marks a CONTINUOUS tremor — something that calls this every frame for as long as
+// it lasts (the Archer's sun falling, its five-second draw, PM2's victory windup) rather than a
+// one-off blow. Those must not arm hit-stop. triggerHitStop takes the max of the current and
+// new timers, so a per-frame caller re-armed the freeze every single frame: the freeze blocks
+// the simulation, the frozen frame therefore never calls triggerShake again, the timer drains,
+// one frame of simulation runs, and it re-arms. Measured on the sun's descent, that advanced
+// the game on roughly one frame in six and stretched a 1.7s phase to nine real seconds.
+// Everything else about the shake — magnitude, duration, the speed lines — is unchanged.
+function triggerShake(magnitude, duration, sustained = false) {
+  // A fresh axis only when nothing is still ringing. Deliberately NOT keyed off the incoming
+  // magnitude: the per-frame callers (the Archer's sun, PM2's victory windup) pass the same
+  // value every frame, and since the magnitude decays between frames any "is this bigger?" test
+  // is true every frame — which would re-randomise the axis every frame and put the white noise
+  // straight back. Blows landing inside an existing shake just top up its magnitude, which is
+  // what gives them their punch, and the oscillation stays continuous.
+  if (shakeTimer <= 0) {
+    shakeAngle = Math.random() * Math.PI * 2;
+    shakePhase = Math.PI / 2; // start at full deflection — an impact snaps, it doesn't ease in
+  }
   shakeMagnitude = Math.max(shakeMagnitude, magnitude);
   shakeTimer = Math.max(shakeTimer, duration);
   // Scales in from nothing at the threshold up to the cap at magnitude ~20 (the heaviest
   // finishers in the game: PM2's wall slam, the Ninja's third slash).
-  if (magnitude >= HITSTOP_MIN_MAGNITUDE) {
+  if (!sustained && magnitude >= HITSTOP_MIN_MAGNITUDE) {
     const k = Math.min(1, (magnitude - HITSTOP_MIN_MAGNITUDE) / 14);
     triggerHitStop(0.03 + k * (HITSTOP_MAX_SECONDS - 0.03));
     // Finisher weight only (ultimates, wall slams) — not ordinary trades. There is deliberately
@@ -144,6 +172,10 @@ function reset() {
   // firemage.js). The mage that started it is about to be thrown away, and if the new round
   // doesn't happen to include a Fire Mage there'd be nothing left that could ever stop it.
   stopFiremageLavaLoop();
+  // Same idea for any of THIS Demon's tridents still whooshing through the air — see
+  // Demon.stopAllTridentSounds. Optional per-character hook, so this no-ops for anyone else.
+  if (typeof fighterA.stopAllTridentSounds === "function") fighterA.stopAllTridentSounds();
+  if (typeof fighterB.stopAllTridentSounds === "function") fighterB.stopAllTridentSounds();
   fighterA = ROSTER[pickA].ctor();
   fighterB = ROSTER[pickB].ctor();
   Object.assign(fighterA, randomVelocity(fighterA.speed));
@@ -748,13 +780,24 @@ function render(time) {
   shakeRoll = 0;
   if (shakeTimer > 0) {
     shakeTimer -= dt;
-    shakeX = (Math.random() * 2 - 1) * shakeMagnitude;
-    shakeY = (Math.random() * 2 - 1) * shakeMagnitude;
+    shakePhase += dt * SHAKE_FREQ;
+    // A damped oscillation along shakeAngle, with a slower wobble across it so it isn't a dead
+    // straight line. Consecutive frames are now neighbouring points on one path instead of two
+    // unrelated random offsets.
+    const swing = Math.sin(shakePhase);
+    const cross = Math.sin(shakePhase * 0.63 + 1.1) * 0.42;
+    const ca = Math.cos(shakeAngle), sa = Math.sin(shakeAngle);
+    shakeX = (ca * swing - sa * cross) * shakeMagnitude;
+    shakeY = (sa * swing + ca * cross) * shakeMagnitude;
     // A slight twist on top of the slide — the frame rocking as well as sliding is what makes
     // a big hit land physically instead of just jittering. Scaled well down from the positional
-    // shake so it never reads as the camera spinning.
-    shakeRoll = (Math.random() * 2 - 1) * shakeMagnitude * 0.0016;
-    shakeMagnitude *= 0.9;
+    // shake so it never reads as the camera spinning, and tied to the same swing so the roll and
+    // the slide move together rather than fighting each other.
+    shakeRoll = swing * shakeMagnitude * 0.0016;
+    // Time-based, so a shake lasts the same wall-clock time regardless of refresh rate. The old
+    // per-frame `*= 0.9` decayed 2.4x faster on a 144Hz display than on a 60Hz one, and lingered
+    // whenever the frame rate dipped — the shake's own duration wobbled with the frame rate.
+    shakeMagnitude *= Math.pow(SHAKE_DECAY, dt);
     if (shakeTimer <= 0) shakeMagnitude = 0;
   }
 

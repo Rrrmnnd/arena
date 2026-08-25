@@ -7,6 +7,29 @@ const BIG_HIT_THRESHOLD = 20;      // damage at or above this gets an emphasized
 const ATTACK_GRACE_DURATION = 1.5; // seconds at round start where every character can move but not attack
 const KNOCKBACK_DECAY_RATE = 2.5;  // how fast an external knockback/slow impulse fades back to nothing (per second)
 
+// How long a character takes to work its OWN speed back to where it belongs after something
+// outside it has changed the magnitude — overwhelmingly resolveCollision, which swaps the two
+// velocities outright, so a 150-speed character that bumps a 400-speed one walks away at 400 and
+// the fast one crawls at 150 for the rest of the round. Nothing put it back before this.
+//
+// The bound has to hold for ANY size of error, not just small ones. A Giant that lets go of its
+// charge leaves the target at 900; at a flat `speed / 1.25` that would take 3.25s to shed. So the
+// correction is exponential — which clears a proportional share of whatever the error is — with a
+// constant floor underneath it so the last sliver still lands instead of asymptoting. Together,
+// any error at all is gone in about SPEED_RESTORE_SECONDS. See restoreOwnSpeed.
+//
+// Direction is never touched, only the magnitude, so a knockback that has turned someone around
+// still carries them where it threw them.
+const SPEED_RESTORE_SECONDS = 1.25;
+// A knockback at or above this also turns the character to face the way it is being thrown. Set
+// so the deliberate little nudges stay nudges — a Demon trident is 70 and the Gunner's own rocket
+// recoil is 200 — while anything that reads as an actual launch (Bomber 500-700, Punch Man (New)
+// 950, Fire Mage and Troll 1500) reorients. Impulses are scaled down against bigger targets
+// before they get here, which is the behaviour you want: a shove that barely moves a Giant
+// shouldn't spin it around either.
+const KNOCKBACK_TURN_MIN = 400;
+const SPEED_RESTORE_DECAY   = 5 / SPEED_RESTORE_SECONDS; // e^-5 of the error left after 1.25s
+
 // Bleed: a stacking vulnerability debuff, currently applied only by the Archer's arrows but
 // implemented here on the base class because it has to amplify damage from EVERY source, not
 // just from whoever applied it. Stacks share one timer that's refreshed in full by each new
@@ -53,6 +76,8 @@ class Character {
     this.bleedStacks = 0; // see applyBleed / bleedMultiplier
     this.bleedTimer = 0;  // one shared timer for the whole stack, refreshed by each application
     this.transfixedTimer = 0; // >0: rooted and staring upward, see applyTransfix
+    this.deafenedTimer = 0;   // >0: rooted with its ears blown out, see applyDeafen
+    this.deafenedMax = 0;     // the duration the current deafen started at, so the fx can fade
   }
 
   // Roots this character in place, staring up at whatever is about to happen to it. Mechanically
@@ -63,6 +88,19 @@ class Character {
   applyTransfix(duration) {
     if (!this.alive) return;
     this.transfixedTimer = Math.max(this.transfixedTimer, duration);
+    this.applyStun(duration);
+  }
+
+  // Blown eardrums: rooted and unable to act. Mechanically a stun for the same reason
+  // applyTransfix is one — every character already bails out of its own update() on stunTimer,
+  // which is exactly the "stop everything" behaviour wanted — but flagged separately so it reads
+  // as a burst eardrum rather than dizziness. The cartoon spiral is suppressed (see
+  // drawStunEffect), the body picks up a fast tremor (see draw), and drawDeafenEffect draws the
+  // ringing and the bleeding ears.
+  applyDeafen(duration) {
+    if (!this.alive) return;
+    this.deafenedTimer = Math.max(this.deafenedTimer, duration);
+    this.deafenedMax = Math.max(this.deafenedMax, this.deafenedTimer);
     this.applyStun(duration);
   }
 
@@ -86,6 +124,28 @@ class Character {
     if (this.movable === false || this.knockbackImmune === true) return;
     this.knockbackVx += dirX * strength;
     this.knockbackVy += dirY * strength;
+
+    // Being launched also turns the character to head the way it was thrown, keeping its own
+    // speed — only the direction changes.
+    //
+    // Without this the knockback layer carries it one way while vx/vy still point wherever it
+    // happened to be walking, so the moment the impulse decays (KNOCKBACK_DECAY_RATE, well under
+    // a second) it turns straight round and walks back into whatever just hit it. That is the
+    // "doesn't look like it got knocked back" case: the launch itself was fine, the recovery was
+    // wrong.
+    //
+    // Taken off the ACCUMULATED knockback rather than this one impulse, so two shoves landing
+    // together send it where their sum actually points.
+    const kb = Math.hypot(this.knockbackVx, this.knockbackVy);
+    if (kb < KNOCKBACK_TURN_MIN) return;
+    // A character driving its own velocity on purpose is not steered off its line — the same set
+    // restoreSpeed marks null: a Giant mid-charge, Punch Man (New) mid-dash, the Troll leaning
+    // into a swing.
+    if (this.restoreSpeed == null) return;
+    const own = Math.hypot(this.vx, this.vy);
+    if (own < 0.01) return;   // deliberately standing still; nothing to redirect
+    this.vx = (this.knockbackVx / kb) * own;
+    this.vy = (this.knockbackVy / kb) * own;
   }
 
   // True once the round-start grace period has elapsed. Subclasses should gate their
@@ -235,6 +295,35 @@ class Character {
     this.vy = Math.sin(angle) * this.speed;
   }
 
+  // The speed this character's own vx/vy should settle back to, or null to leave it alone for
+  // now. Overridden by the characters that drive their own velocity deliberately — a Giant
+  // mid-charge, Punch Man (New) mid-dash, the Troll leaning into a swing — so the restore never
+  // fights a state that means to be moving at some other pace.
+  //
+  // The Knight needs no override despite being the one character that changes speed on its own:
+  // its ramp already rescales vx/vy to this.speed every frame and runs BEFORE super.update(), so
+  // by the time this sees it there is nothing left to correct. Its recovery stays instant, and
+  // this.speed follows the ramp, so the target is always the right one.
+  get restoreSpeed() {
+    return this.speed;
+  }
+
+  restoreOwnSpeed(dt) {
+    const target = this.restoreSpeed;
+    if (target == null || target <= 0) return;
+    const mag = Math.hypot(this.vx, this.vy);
+    // A character that has deliberately stopped — casting, absorbing, planted mid-swing — has no
+    // direction to restore along, and must not be shoved back up to walking pace.
+    if (mag < 0.01) return;
+    const diff = target - mag;
+    if (Math.abs(diff) < 0.5) return;
+    const step = Math.max(Math.abs(diff) * SPEED_RESTORE_DECAY,
+                          target / SPEED_RESTORE_SECONDS) * dt;
+    const next = mag + (diff > 0 ? Math.min(diff, step) : Math.max(diff, -step));
+    this.vx *= next / mag;
+    this.vy *= next / mag;
+  }
+
   moveAndBounce(dt) {
     // The knockback layer decays back toward zero on its own each frame, so a burst of extra
     // speed from an explosion gradually settles back to the character's normal pace.
@@ -271,12 +360,19 @@ class Character {
       if (this.bleedTimer <= 0) this.bleedStacks = 0; // the whole stack drops at once, not one at a time
     }
     if (this.transfixedTimer > 0) this.transfixedTimer -= dt;
+    if (this.deafenedTimer > 0) {
+      this.deafenedTimer -= dt;
+      if (this.deafenedTimer <= 0) this.deafenedMax = 0;
+    }
     if (this.stunTimer > 0) {
       this.stunTimer -= dt;
       if (this.stunTimer <= 0) this.onStunEnd();
       return;
     }
-    if (this.movable) this.moveAndBounce(dt);
+    if (this.movable) {
+      this.restoreOwnSpeed(dt);
+      this.moveAndBounce(dt);
+    }
     if (this.hitCooldown > 0) this.hitCooldown -= dt;
   }
 
@@ -297,13 +393,18 @@ class Character {
       ctx.rotate(lean);
       ctx.translate(-this.x, -pivotY);
     }
+    // Deafened: a fast, small tremor — the world ringing. Deliberately high frequency and only a
+    // couple of pixels, so it reads as the character's own disorientation and not as a second
+    // screen shake. Same "applies to every character without touching any of them" trick as the
+    // transfix lean above.
+    if (this.deafenedTimer > 0) {
+      const f = Math.min(1, this.deafenedTimer / (this.deafenedMax || 1));
+      const tm = performance.now() / 1000;
+      ctx.translate(Math.sin(tm * 61) * 2.6 * f, Math.cos(tm * 47) * 1.9 * f);
+    }
     this.drawBody(ctx);
     if (this.hitFlashTimer > 0) {
-      const savedColor = this.color;
-      this.color = this.hitFlashColor || "#ffffff";
-      ctx.globalAlpha = alpha * Math.min(1, this.hitFlashTimer / HIT_FLASH_DURATION) * 0.75;
-      this.drawBody(ctx);
-      this.color = savedColor;
+      this.drawHitFlash(ctx, alpha * Math.min(1, this.hitFlashTimer / HIT_FLASH_DURATION) * 0.75);
     }
     ctx.restore();
 
@@ -311,7 +412,23 @@ class Character {
       this.drawBleedEffect(ctx);
       this.drawFieldHpBar(ctx);
       this.drawStunEffect(ctx);
+      this.drawDeafenEffect(ctx);
     }
+  }
+
+  // The flash on taking a hit. The default re-draws the body with this.color swapped for the
+  // flash colour, which whitens every character whose body fill IS this.color.
+  //
+  // A character that paints itself from its own fixed palette must override this. Re-drawing it
+  // unchanged at partial alpha does not whiten anything — it just lays the same figure over
+  // itself, which reads as the character briefly going see-through instead of flashing. See
+  // Troll.drawHitFlash.
+  drawHitFlash(ctx, strength) {
+    const savedColor = this.color;
+    this.color = this.hitFlashColor || "#ffffff";
+    ctx.globalAlpha = strength;
+    this.drawBody(ctx);
+    this.color = savedColor;
   }
 
   // Bleed, shown as drops running down the body — one per stack, so how badly a target is
@@ -354,6 +471,9 @@ class Character {
     // gag exactly when the moment wants to be ominous — the lean-back in draw() carries it
     // instead. See applyTransfix.
     if (this.transfixedTimer > 0) return;
+    // Same reasoning for a deafened character: the spiral says "dizzy", and this wants to say
+    // "its ears just went". See applyDeafen / drawDeafenEffect.
+    if (this.deafenedTimer > 0) return;
 
     const cx = this.x;
     const cy = this.y - this.size / 2 - 30;
@@ -377,6 +497,70 @@ class Character {
       if (a === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.stroke();
+    ctx.restore();
+  }
+
+  // Blown eardrums, drawn as three things at once so it can't be mistaken for the stun spiral:
+  // rings collapsing INWARD onto the head (the exact inverse of the roar's outgoing rings, so the
+  // two read as cause and effect), a jagged white burst off each ear, and blood running down from
+  // them. The body's own tremor is applied back in draw().
+  drawDeafenEffect(ctx) {
+    if (this.deafenedTimer <= 0) return;
+    const max = this.deafenedMax || 1;
+    const f = Math.max(0, Math.min(1, this.deafenedTimer / max)); // 1 fresh, 0 as it wears off
+    const t = performance.now() / 1000;
+    const r = this.size / 2;
+    const headY = this.y - r * 0.16;
+
+    ctx.save();
+
+    // Sound crushing in
+    for (let i = 0; i < 3; i++) {
+      const p = (t * 2.4 + i / 3) % 1;
+      const rad = r * (2.2 - p * 1.25);
+      ctx.globalAlpha = (1 - p) * 0.55 * f;
+      ctx.strokeStyle = "#fff2f2";
+      ctx.lineWidth = 1.5 + (1 - p) * 2.5;
+      ctx.beginPath();
+      ctx.ellipse(this.x, headY, rad, rad * 0.74, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    for (const side of [1, -1]) {
+      const ex = this.x + side * r * 0.86;
+      const ey = headY - r * 0.06;
+
+      // The burst: short jagged spikes off the ear, flickering at high frequency
+      ctx.globalAlpha = f;
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineCap = "round";
+      for (let i = 0; i < 5; i++) {
+        const a = -0.85 + i * 0.42;
+        const flick = 0.65 + 0.35 * Math.sin(t * 44 + i * 2.1 + side);
+        const len = r * (0.26 + (i % 2) * 0.2) * flick;
+        ctx.lineWidth = 2.6 - (i % 2) * 0.9;
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex + Math.cos(a) * len * side, ey + Math.sin(a) * len);
+        ctx.stroke();
+      }
+
+      // Blood out of the ear, running further down the longer it goes on — so the effect builds
+      // over the second rather than just flashing and holding.
+      const run = (1 - f) * r * 0.55;
+      ctx.globalAlpha = Math.min(1, (1 - f) * 3);
+      ctx.strokeStyle = "#a3121b";
+      ctx.lineWidth = r * 0.09;
+      ctx.beginPath();
+      ctx.moveTo(ex, ey + r * 0.06);
+      ctx.quadraticCurveTo(ex + side * r * 0.05, ey + r * 0.06 + run * 0.6, ex, ey + r * 0.06 + run);
+      ctx.stroke();
+      ctx.fillStyle = "#c8171f";
+      ctx.beginPath();
+      ctx.arc(ex, ey + r * 0.06 + run, r * 0.07, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.restore();
   }
 

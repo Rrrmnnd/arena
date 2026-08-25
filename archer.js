@@ -264,7 +264,7 @@ class Archer extends Character {
     if (this.ultPhase === "charge") {
       const f = this.ultTimer / ARCHER_ULT_CHARGE;
       // Building tremor through the draw
-      if (f > 0.35) triggerShake(1.5 + f * 5, 0.1);
+      if (f > 0.35) triggerShake(1.5 + f * 5, 0.1, true); // sustained: called every frame
       if (this.ultTimer >= ARCHER_ULT_CHARGE) {
         // The target is locked HERE, at the moment of release. It's also pinned in place looking
         // up for the rest of the sequence — not just for the shot of it watching its own end, but
@@ -316,7 +316,7 @@ class Archer extends Character {
 
     if (this.ultPhase === "descend") {
       const f = this.ultTimer / ARCHER_ULT_DESCEND;
-      triggerShake(4 + f * 22, 0.12);
+      triggerShake(4 + f * 22, 0.12, true); // sustained: called every frame of the fall
       if (this.ultTimer >= ARCHER_ULT_DESCEND) {
         this.ultPhase = "crush";
         this.ultTimer = 0;

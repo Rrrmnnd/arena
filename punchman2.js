@@ -520,6 +520,12 @@ class PunchManNew extends Character {
     return super.moveAndBounce(dt * (this.inRange ? PUNCHMAN2_ATTACK_SLOW_FACTOR : 1));
   }
 
+  // A dash runs at PUNCHMAN2_DASH_SPEED on purpose; endDash() rescales back to walking pace on
+  // its own the moment it is over.
+  get restoreSpeed() {
+    return this.dashTimer > 0 ? null : super.restoreSpeed;
+  }
+
   startDash(dx, dy, dist) {
     this.dashTimer = PUNCHMAN2_DASH_DURATION;
     this.dashCooldown = PUNCHMAN2_DASH_COOLDOWN;
@@ -633,7 +639,7 @@ class PunchManNew extends Character {
         this.victoryRumbleTimer -= dt;
         if (this.victoryRumbleTimer <= 0) {
           this.victoryRumbleTimer = 0.16 - k * 0.09;
-          triggerShake(1.5 + k * 6, 0.12);
+          triggerShake(1.5 + k * 6, 0.12, true); // sustained: a repeating windup tremor
         }
       } else if (!this.victoryLaunched) {
         this.victoryLaunched = true;
