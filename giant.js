@@ -81,6 +81,16 @@ class Giant extends Character {
     return this.isCharging || this.isWindingUp;
   }
 
+  // Once the dash is actually moving, nothing stops it: no stun, no pin, no deafen. The wind-up
+  // is deliberately NOT covered — that half-second stood still is the tell, and the whole counter
+  // to the charge is punishing it before it launches.
+  //
+  // stunFromWallHit() clears isCharging BEFORE it stuns, so the Giant's own crash into a wall or
+  // a pillar still lands: this only turns aside control coming from someone else.
+  get immuneToControl() {
+    return this.isCharging;
+  }
+
   takeDamage(dmg, colorOverride = null) {
     if (this.skillState === "absorbing") {
       const actual = dmg * (1 - GIANT_ABSORB_DAMAGE_REDUCT); // only a quarter actually hits HP
@@ -123,8 +133,44 @@ class Giant extends Character {
   launchCharge() {
     this.isWindingUp = false;
     this.isCharging = true;
+    // Sheds anything already on it as it goes. immuneToControl only stops NEW effects, and a
+    // Giant that was pinned during its wind-up would otherwise launch with movable === false and
+    // dash on the spot — the charge would play out in full without ever moving.
+    this.pinnedTimer = 0;
+    this.stunTimer = 0;
+    this.deafenedTimer = 0;
+    this.transfixedTimer = 0;
+    this.movable = true;
     this.vx = this.chargeDirX * GIANT_CHARGE_ATTACK_SPEED;
     this.vy = this.chargeDirY * GIANT_CHARGE_ATTACK_SPEED;
+  }
+
+  // The base class's onStunEnd() unconditionally sets movable = true and hands the character a
+  // random walking-speed velocity — fine for anyone with no state of its own to protect, but the
+  // Giant has two states that come with a hard rule the base class doesn't know about:
+  //
+  //  - absorbing: "stands still... can't be knocked back" (see the skillState === "absorbing"
+  //    branch in update()). Only that branch's own natural end (chargeTime <= 0) is allowed to
+  //    make it movable again. Without this override, an external stun (the Troll's roar, 2s)
+  //    wearing off BEFORE the absorb window's own remaining time would silently restore movement
+  //    early — the Giant would act again despite still having seconds left on its own ultimate.
+  //  - isCharging: the dash's velocity IS the charge, not something to hand off to a random
+  //    redirect. The base class's version would replace GIANT_CHARGE_ATTACK_SPEED along
+  //    chargeDirX/Y with a slow wander in an unrelated direction while isCharging stayed true —
+  //    and if that random heading happened to clip a wall, hasHitOpponentThisCharge being false
+  //    would trip a second, unrelated stunFromWallHit() on top of it.
+  //
+  // Both are resolved the same way: resume exactly what the state already calls for, rather than
+  // ask the base class's generic "wandering off" recovery to guess.
+  onStunEnd() {
+    if (this.skillState === "absorbing") return;   // stays put; the absorb window's own end restores movement
+    if (this.isCharging) {
+      this.movable = true;
+      this.vx = this.chargeDirX * GIANT_CHARGE_ATTACK_SPEED;
+      this.vy = this.chargeDirY * GIANT_CHARGE_ATTACK_SPEED;
+      return;
+    }
+    super.onStunEnd();
   }
 
   // Shared impact FX for either a whiffed wall-ram or a successful wall-slam.
@@ -152,6 +198,14 @@ class Giant extends Character {
     const angle = Math.random() * Math.PI * 2;
     this.vx = Math.cos(angle) * this.speed;
     this.vy = Math.sin(angle) * this.speed;
+  }
+
+  // A solid obstacle stops the charge exactly the way the arena wall does — see
+  // separateFromPillar, which fires this after pushing the Giant clear of the stone. Only if the
+  // charge had not already connected: a dash that landed its hit and then clipped a pillar on the
+  // follow-through has already succeeded and gets the normal ending, not a self-stun.
+  onHitObstacle() {
+    if (this.isCharging && !this.hasHitOpponentThisCharge) this.stunFromWallHit();
   }
 
   // Overridden so a charge that rams a wall WITHOUT ever touching the opponent triggers

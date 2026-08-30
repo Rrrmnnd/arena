@@ -15,7 +15,7 @@ const NINJA_MELEE_DAMAGE   = 4;
 const NINJA_MELEE_COOLDOWN = 0.4; // one dagger hit per fresh collision, not specified further — tune later
 
 const NINJA_SHURIKEN_DAMAGE   = 3;
-const NINJA_SHURIKEN_COOLDOWN = 0.75;
+const NINJA_SHURIKEN_COOLDOWN = 0.95;
 const NINJA_SHURIKEN_SPEED    = 820;
 const NINJA_SHURIKEN_LIFE     = 2.0; // safety timeout in case it somehow never leaves the arena
 const NINJA_SHURIKEN_SPIN     = 14;  // radians/sec while in flight
@@ -287,6 +287,11 @@ class Ninja extends Character {
       s.spin += dt * NINJA_SHURIKEN_SPIN;
 
       let gone = s.life <= 0 || s.x < ARENA.x || s.x > ARENA.x + ARENA.w || s.y < ARENA.y || s.y > ARENA.y + ARENA.h;
+      // Blocked by a stone pillar, same as by the arena wall — see combat.js's obstacle registry.
+      if (!gone && obstacleBlocking(s.x, s.y, 3)) {
+        gone = true;
+        spawnImpactParticles(s.x, s.y, ["#9c8a6e", "#6f6047", "#c4b596"], 10, 1.0, 140);
+      }
 
       if (!gone && opponent && opponent.alive) {
         const dist = Math.hypot(opponent.x - s.x, opponent.y - s.y);
@@ -884,16 +889,27 @@ class Ninja extends Character {
   // targetable/collidable as the original itself; main.js consults this so the opponent can
   // actually aim at and collide with any of them, not just whichever it's currently fighting.
   // See the generic default on Character for the full rationale.
+  // Rewritten to always start from cloneRoot rather than walking `this.clones` directly. Called
+  // on the original that is exactly the same as before; called on a CLONE it used to return only
+  // that clone's own descendants, silently leaving out the original and every sibling clone.
+  // That's what let the Troll's roar occasionally deafen only one of several clones — main.js
+  // hands Troll's update() whichever body is nearest as `opponent`, which is sometimes a clone,
+  // and the roar's "everyone in front of it" loop trusted opponent.getExtraBodies() to mean
+  // "everyone else in the family" when it only meant "everyone below this specific node".
   getExtraBodies() {
+    const root = this.cloneRoot;
     const bodies = [];
-    // Walks every clone this fighter directly summoned, and recurses into each one's own
-    // clones regardless of that clone's own alive state — a dead clone shouldn't hide any
-    // still-living clones further down its own branch.
-    for (const c of this.clones) {
-      if (c.alive) bodies.push(c);
-      bodies.push(...c.getExtraBodies());
-    }
-    return bodies;
+    if (root.alive) bodies.push(root);
+    // Walks every clone in the WHOLE family tree, recursing regardless of a clone's own alive
+    // state — a dead clone shouldn't hide any still-living clones further down its own branch.
+    const walk = (node) => {
+      for (const c of node.clones) {
+        if (c.alive) bodies.push(c);
+        walk(c);
+      }
+    };
+    walk(root);
+    return bodies.filter((b) => b !== this);
   }
 
   draw(ctx) {

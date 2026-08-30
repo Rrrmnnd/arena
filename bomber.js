@@ -366,17 +366,6 @@ class Bomber extends Character {
     playSfx("bomberExplode", 0.65);
   }
 
-  drawBombs(ctx) {
-    for (const bomb of this.bombs) {
-      if (bomb.flight) {
-        drawBomb(ctx, bomb.displayX, bomb.displayY, 1, 0); // mid-arc, no urgency yet
-      } else {
-        const urgency = Math.max(0, Math.min(1, 1 - bomb.fuseTimer / BOMBER_URGENCY_WINDOW));
-        drawBomb(ctx, bomb.x, bomb.y, 1, urgency);
-      }
-    }
-  }
-
   // 0..1 — how close the nearest live regular (non-ultimate, already-landed) bomb is to
   // detonating. Drives the pre-explosion telegraph on the Bomber's own body (see drawBody)
   // for the synced body-blast in detonateBomb, the same "about to blow" language as an
@@ -473,8 +462,24 @@ class Bomber extends Character {
     ctx.restore();
   }
 
+  // Each planted bomb sorts on its OWN position rather than the Bomber's — see
+  // Character.getDepthItems. Still produced even once the Bomber is dead, so bombs already on the
+  // field keep ticking down in view.
+  getDepthItems() {
+    return this.bombs.map((bomb) => {
+      // A bomb still arcing through the air is drawn at its flight position and sorts by it; a
+      // landed one sorts where it is sitting on the floor.
+      const inFlight = !!bomb.flight;
+      const px = inFlight ? bomb.displayX : bomb.x;
+      const py = inFlight ? bomb.displayY : bomb.y;
+      const urgency = inFlight
+        ? 0
+        : Math.max(0, Math.min(1, 1 - bomb.fuseTimer / BOMBER_URGENCY_WINDOW));
+      return { depthY: py, draw: (ctx) => drawBomb(ctx, px, py, 1, urgency) };
+    });
+  }
+
   draw(ctx) {
-    this.drawBombs(ctx); // drawn even after death so any bombs already on the field can still be seen ticking down
     if (!this.alive && this.deathFadeTimer <= 0) return;
     super.draw(ctx);
     this.drawPlantingAnim(ctx);

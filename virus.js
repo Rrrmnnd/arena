@@ -471,6 +471,11 @@ class Virus extends Character {
       s.y += s.vy * dt;
 
       let gone = s.life <= 0 || s.x < ARENA.x || s.x > ARENA.x + ARENA.w || s.y < ARENA.y || s.y > ARENA.y + ARENA.h;
+      // Blocked by a stone pillar, same as by the arena wall — see combat.js's obstacle registry.
+      if (!gone && obstacleBlocking(s.x, s.y, 3)) {
+        gone = true;
+        spawnImpactParticles(s.x, s.y, ["#9c8a6e", "#6f6047", "#c4b596"], 10, 1.0, 140);
+      }
 
       if (!gone && opponent && opponent.alive) {
         const dist = Math.hypot(opponent.x - s.x, opponent.y - s.y);

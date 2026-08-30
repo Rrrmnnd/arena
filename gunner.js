@@ -33,7 +33,7 @@ const GUNNER_WEAPON_TIERS = [
   { name: "Pistol", fireRate: 2,     damage: 1,  evolveTime: 9.0 },  // Pistol->SMG: was 10.0, -1s
   { name: "SMG",     fireRate: 5.5,  damage: 1,  evolveTime: 13.0 }, // SMG->Rifle: was 15.0, -2s
   { name: "Rifle",   fireRate: 3,    damage: 4,  evolveTime: 13.0 }, // Rifle->Rocket Launcher: was 16.0, -3s
-  { name: "Rocket Launcher", fireRate: 1 / 3, damage: 20, evolveTime: 20.0 }, // Rocket Launcher->Laser Cannon: was 25dmg/0.25fireRate/16.0s
+  { name: "Rocket Launcher", fireRate: 1 / 3, damage: 20, evolveTime: 18.0 }, // Rocket Launcher->Laser Cannon: was 25dmg/0.25fireRate/16.0s, then 20.0s
   { name: "Laser Cannon", isBeam: true, tickDamage: 8, tickInterval: 0.25 },
 ];
 
@@ -324,6 +324,17 @@ class Gunner extends Character {
 
       let gone = b.life <= 0 || b.x < ARENA.x || b.x > ARENA.x + ARENA.w || b.y < ARENA.y || b.y > ARENA.y + ARENA.h;
       let directHit = false;
+
+      // Stone pillars are solid: a bullet that runs into one stops there. A rocket still
+      // detonates (it hit something), it just detonates against the rock instead of the target —
+      // which is exactly the point of taking cover behind one.
+      if (!gone) {
+        const wall = obstacleBlocking(b.x, b.y, 4);
+        if (wall) {
+          gone = true;
+          spawnImpactParticles(b.x, b.y, ["#9c8a6e", "#6f6047", "#c4b596"], 12, 1.1, 140);
+        }
+      }
 
       if (!gone && opponent && opponent.alive) {
         const dist = Math.hypot(opponent.x - b.x, opponent.y - b.y);

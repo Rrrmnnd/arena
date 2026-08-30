@@ -22,6 +22,7 @@ const ROSTER = [
   { label: "Fire Mage", ctor: () => new FireMage(0, 0), excludeFromTwitch: true },
   { label: "Archer", ctor: () => new Archer(0, 0), excludeFromTwitch: true },
   { label: "Troll", ctor: () => new Troll(0, 0) },
+  { label: "Earth Mage", ctor: () => new EarthMage(0, 0) },
 ];
 
 let gameMode = "1v1"; // "1v1" | "vsboss" — which mode is currently toggled in the setup screen
@@ -55,6 +56,14 @@ let endTimer = 0;
 let pendingBlob = null;
 let promptReady = false;
 let queuedDecision = null; // "keep" | "discard" | null — a Y/N pressed before the prompt was ready
+// [P] freezes everything. Deliberately reuses the hit-stop freeze below rather than inventing a
+// second suspension path: that gate already stops fighters, collisions, particles and abilities
+// while still DRAWING every frame, which is exactly what a pause is — just held open until the
+// key is pressed again instead of for a few frames.
+//
+// Draws NOTHING of its own: no overlay, no dimming, no label. The battlefield simply stops, which
+// keeps a paused frame usable as-is for a screenshot or an OBS source.
+let paused = false;
 let twitchRoundActive = false; // true for the duration of a round started by triggerTwitchBattle() — see that function and the "ended" handling below
 
 let shakeMagnitude = 0;
@@ -116,6 +125,27 @@ function triggerShake(magnitude, duration, sustained = false) {
   }
 }
 
+// Painter's-algorithm order for everything that stands on the arena floor: whatever is LOWER on
+// screen is nearer the camera, so it is drawn last and occludes what is behind it.
+//
+// This takes the fighters AND every upright prop they own (see Character.getDepthItems — the
+// Bomber's bombs, the Earth Mage's pillars) and puts them all in ONE sorted pass. Three fixed
+// layers cannot express this: anything solid standing on the floor has to be able to land either
+// side of a fighter depending on where it actually is, and pinning it to a layer guarantees it
+// looks wrong from one side. Flat floor decals are the exception and stay in the pass underneath
+// (drawGroundEffects) — you stand ON lava, so it is always under you.
+function collectDepthItems(fighters) {
+  const items = [];
+  for (const f of fighters) {
+    if (!f) continue;
+    items.push({ depthY: f.y, draw: (c) => f.draw(c) });
+    if (typeof f.getDepthItems === "function") {
+      for (const it of f.getDepthItems()) items.push(it);
+    }
+  }
+  return items.sort((a, b) => a.depthY - b.depthY);
+}
+
 // True while a dead fighter still has a self-destruct pending (e.g. the Bomber) — it might
 // still take the survivor down too, so we shouldn't lock in a "winner" or start a victory
 // animation until that resolves one way or the other.
@@ -168,6 +198,9 @@ function randomVelocity(speed) {
 
 function reset() {
   winner = null;
+  // Stone pillars are registered globally so projectiles can be blocked by them without knowing
+  // who put them there (see combat.js). They belong to the round that made them.
+  clearWorldObstacles();
   // Fire Mage's lava ambience is a looping audio node owned outside any one character (see
   // firemage.js). The mage that started it is about to be thrown away, and if the new round
   // doesn't happen to include a Fire Mage there'd be nothing left that could ever stop it.
@@ -176,6 +209,10 @@ function reset() {
   // Demon.stopAllTridentSounds. Optional per-character hook, so this no-ops for anyone else.
   if (typeof fighterA.stopAllTridentSounds === "function") fighterA.stopAllTridentSounds();
   if (typeof fighterB.stopAllTridentSounds === "function") fighterB.stopAllTridentSounds();
+  // Same idea for an Earth Mage pillar caught mid-rise — its rockslide loop is owned by a pillar
+  // on a mage that is about to be discarded, so nothing else could ever stop it.
+  if (typeof fighterA.stopAllPillarSounds === "function") fighterA.stopAllPillarSounds();
+  if (typeof fighterB.stopAllPillarSounds === "function") fighterB.stopAllPillarSounds();
   fighterA = ROSTER[pickA].ctor();
   fighterB = ROSTER[pickB].ctor();
   Object.assign(fighterA, randomVelocity(fighterA.speed));
@@ -495,6 +532,13 @@ window.addEventListener("keydown", (e) => {
     return;
   }
 
+  // Before the mode guards below, so it works in 1v1, VS BOSS and the lab alike. Not while
+  // parked on the Twitch idle screen or in setup — there is no action there to pause.
+  if (e.key === "p" || e.key === "P") {
+    if (mode === "battle") paused = !paused;
+    return;
+  }
+
   if (mode === "setup") return; // everything in setup is mouse-driven
   // R/Y/N are meaningless while parked waiting for a Twitch redemption — there's no in-progress
   // recording or fighters those keys are meant to act on. Tab still works (handled above,
@@ -714,8 +758,10 @@ function render(time) {
   // DRAWS every frame (the freeze has to be visible, not a dropped frame); only the advancing of
   // time is suspended. The shake and the screen flash deliberately keep running underneath, so
   // the frozen image is a rattling, blown-out one rather than a dead pause.
-  const frozen = hitStopTimer > 0;
-  if (frozen) hitStopTimer -= dt;
+  const frozen = paused || hitStopTimer > 0;
+  // A pause must not eat the hit-stop it was pressed during — the freeze picks up where it left
+  // off on unpause, rather than having quietly drained while nothing was moving.
+  if (!paused && hitStopTimer > 0) hitStopTimer -= dt;
 
   if (!frozen && gameMode === "1v1" && mode === "battle" && (roundState === "playing" || roundState === "ended")) {
     // A fighter that's currently untrackable (e.g. one hidden in its own smoke) is excluded
@@ -774,11 +820,13 @@ function render(time) {
   if (!frozen && gameMode === "lab" && mode === "battle") labUpdate(dt);
 
   // Runs even while frozen — see the hit-stop note above.
-  updateSpeedLines(dt);
+  if (!paused) updateSpeedLines(dt);
 
   let shakeX = 0, shakeY = 0;
   shakeRoll = 0;
-  if (shakeTimer > 0) {
+  // Frozen with everything else: a screen still rattling over a stopped fight reads as a bug,
+  // not as a pause. (Hit-stop deliberately does the opposite and keeps shaking — see above.)
+  if (shakeTimer > 0 && !paused) {
     shakeTimer -= dt;
     shakePhase += dt * SHAKE_FREQ;
     // A damped oscillation along shakeAngle, with a slower wobble across it so it isn't a dead
@@ -861,15 +909,15 @@ function render(time) {
       if (gameMode === "lab") {
         labDraw(c);
       } else if (gameMode === "1v1") {
+        // Ground effects all go down first regardless of order — they are floor decals, and
+        // every one of them belongs under every fighter.
         fighterA.drawGroundEffects(c);
         fighterB.drawGroundEffects(c);
-        fighterA.draw(c);
-        fighterB.draw(c);
+        for (const it of collectDepthItems([fighterA, fighterB])) it.draw(c);
       } else if (boss) {
         boss.drawGroundEffects(c);
         for (const ally of allies) ally.drawGroundEffects(c);
-        boss.draw(c);
-        for (const ally of allies) ally.draw(c);
+        for (const it of collectDepthItems([boss, ...allies])) it.draw(c);
       }
       drawParticles(c);
       drawFlashes(c);
@@ -946,7 +994,7 @@ function render(time) {
     recordCtx.restore();
   }
 
-  if (gameMode === "1v1" && mode === "battle" && roundState === "ended") {
+  if (!paused && gameMode === "1v1" && mode === "battle" && roundState === "ended") {
     endTimer += dt;
     if (endTimer >= ROUND_END_GRACE) {
       if (twitchRoundActive) {

@@ -53,6 +53,10 @@ loadSfx("wallSlam", "sfx_wall_slam.mp3");
 loadSfx("punchmanUltimate", "sfx_punchman_ultimate.mp3");
 loadSfx("demonTridentWoosh", "sfx_demon_trident_woosh.mp3"); // Recall only, not an ordinary throw — looped per trident for exactly as long as IT is flying home; see Demon.updateTridents
 loadSfx("demonThrow", "sfx_demon_throw.mp3");
+loadSfx("earthmageSand", "sfx_earthmage_sand.mp3"); // the sand bolt firing — see EarthMage.throwSand
+loadSfx("earthmageHit", "sfx_earthmage_hit.mp3");   // and the sand bolt landing on a body — see EarthMage.updateBolts
+loadSfx("earthmageRise", "sfx_earthmage_rise.mp3"); // looped for exactly as long as a pillar takes to rise — see EarthMage.summonPillar
+loadSfx("earthmageCollapse", "sfx_earthmage_collapse.mp3"); // the moment a toppled column lands — see EarthMage.resolveToppledPillar
 loadSfx("demonUltimate", "sfx_demon_ultimate.mp3");
 loadSfx("demonHit", "sfx_demon_hit.mp3");
 loadSfx("bomberPlant", "sfx_bomber_plant.mp3");

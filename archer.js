@@ -160,9 +160,12 @@ class Archer extends Character {
 
   // Holds the round open from the moment the arrow leaves the bow until the sun has landed, so
   // killing the Archer mid-descent can't win the round out from under a star that is visibly
-  // about to flatten you. See Character.blocksRoundEnd.
+  // about to flatten you. Combined with the base class's own reason (still visibly stunned/
+  // pinned), not replacing it — an Archer that is merely pinned, sun long since landed, still
+  // needs the base check to hold the round open.
   get blocksRoundEnd() {
-    return this.ultPhase === "ascend" || this.ultPhase === "hang" || this.ultPhase === "descend";
+    return super.blocksRoundEnd
+        || this.ultPhase === "ascend" || this.ultPhase === "hang" || this.ultPhase === "descend";
   }
 
   update(dt, opponent) {

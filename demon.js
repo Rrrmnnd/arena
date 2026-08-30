@@ -84,6 +84,9 @@ class Trident {
     this.vx = Math.cos(angle) * DEMON_TRIDENT_SPEED;
     this.vy = Math.sin(angle) * DEMON_TRIDENT_SPEED;
     this.state = "flying"; // flying | embedded | stuck
+    this.stuckTo = null;   // the pillar this one is lodged in, if any — see updateTridents
+    this.stuckOffX = 0;
+    this.stuckOffY = 0;
     this.target = null;
     this.offsetAngle = 0; // where around the target's perimeter this one is stuck, once embedded
     this.fadeTimer = 0;
@@ -478,6 +481,24 @@ class Demon extends Character {
           }
         }
 
+        // A pillar catches it the same way a wall does, except the trident stays attached to
+        // that particular stone: if the pillar later goes over, the trident it was carrying drops
+        // to the floor rather than hanging in mid-air where the rock used to be (see
+        // updateTridents' "stuck" branch).
+        const pillar = obstacleBlocking(t.x, t.y, 4);
+        if (pillar) {
+          t.state = "stuck";
+          t.homing = false;
+          t.stuckTo = pillar;
+          t.stuckOffX = t.x - pillar.x;
+          t.stuckOffY = t.y - pillar.y;
+          t.fadeTimer = 0;
+          this.stopWoosh(t);
+          spawnImpactParticles(t.x, t.y, ["#9c8a6e", "#6f6047", "#c4b596"], 14, 1.2, 140);
+          playSfx("demonHit", 0.35);
+          continue;
+        }
+
         const half = 4;
         const left = ARENA.x + ARENA_BORDER + half;
         const right = ARENA.x + ARENA.w - ARENA_BORDER - half;
@@ -490,6 +511,17 @@ class Demon extends Character {
           t.homing = false;
           t.fadeTimer = 0; // 0 means "waiting in the wall indefinitely" — see enforceWallCap
           this.stopWoosh(t);
+        }
+      } else if (t.state === "stuck" && t.stuckTo) {
+        // Riding a pillar. Once that pillar is no longer standing, the trident it was holding
+        // falls straight down onto the floor and just lies there like any other spent throw.
+        if (t.stuckTo.blocksProjectiles) {
+          t.x = t.stuckTo.x + t.stuckOffX;
+          t.y = t.stuckTo.y + t.stuckOffY;
+        } else {
+          t.stuckTo = null;
+          t.angle = Math.PI / 2;   // dropped flat on the ground
+          spawnImpactParticles(t.x, t.y, ["#9c8a6e", "#6f6047"], 8, 0.9, 200);
         }
       } else if (t.state === "stuck" && t.fadeTimer > 0) {
         // Only ever counting down for one being pushed out past the cap

@@ -8,6 +8,40 @@
 
 const HIT_COOLDOWN = 0.4; // seconds, prevents one overlap from re-triggering the impact fx every frame
 
+// Solid things in the arena that are NOT fighters — currently only the Earth Mage's stone
+// pillars. Kept as a shared registry rather than reached for through whichever character happens
+// to own them, so a projectile can ask "is anything solid in my way?" without every projectile in
+// the game having to know what an Earth Mage is.
+//
+// Anything registered here needs { x, y, size, blocksProjectiles }. `blocksProjectiles` is read
+// live, so an obstacle can stop blocking (a pillar going over) without deregistering.
+const worldObstacles = [];
+
+function addWorldObstacle(o) {
+  if (!worldObstacles.includes(o)) worldObstacles.push(o);
+}
+
+function removeWorldObstacle(o) {
+  const i = worldObstacles.indexOf(o);
+  if (i >= 0) worldObstacles.splice(i, 1);
+}
+
+// Cleared at the start of every round (see reset() in main.js). Without that, pillars left
+// standing when a round ends would stay registered into the next one and silently eat projectiles
+// with nothing on screen to explain it.
+function clearWorldObstacles() {
+  worldObstacles.length = 0;
+}
+
+// The obstacle a projectile of radius `r` centred at (x, y) is currently inside, or null.
+function obstacleBlocking(x, y, r = 0) {
+  for (const o of worldObstacles) {
+    if (!o.blocksProjectiles) continue;
+    if (Math.hypot(x - o.x, y - o.y) <= o.size / 2 + r) return o;
+  }
+  return null;
+}
+
 function resolveCollision(a, b) {
   if (!a.alive || !b.alive) return;
   // A character mid-liquid-swim (or similar non-solid state) has nothing physical to bump into

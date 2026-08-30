@@ -56,6 +56,7 @@ class Character {
     this.vx = Math.cos(angle) * speed;
     this.vy = Math.sin(angle) * speed;
     this.movable = true; // special states (e.g. Giant absorbing) can temporarily disable movement/knockback
+    this.pinnedTimer = 0; // >0: held in place but still able to act — see applyPin
 
     // Contact-damage invulnerability window, so one collision doesn't hit multiple frames in a row
     this.hitCooldown = 0;
@@ -86,7 +87,7 @@ class Character {
   // dread rather than dizziness: the cartoon spiral is suppressed and the body leans back to look
   // up instead (see drawStunEffect / draw).
   applyTransfix(duration) {
-    if (!this.alive) return;
+    if (!this.alive || this.immuneToControl) return;
     this.transfixedTimer = Math.max(this.transfixedTimer, duration);
     this.applyStun(duration);
   }
@@ -98,7 +99,7 @@ class Character {
   // drawStunEffect), the body picks up a fast tremor (see draw), and drawDeafenEffect draws the
   // ringing and the bleeding ears.
   applyDeafen(duration) {
-    if (!this.alive) return;
+    if (!this.alive || this.immuneToControl) return;
     this.deafenedTimer = Math.max(this.deafenedTimer, duration);
     this.deafenedMax = Math.max(this.deafenedMax, this.deafenedTimer);
     this.applyStun(duration);
@@ -116,6 +117,38 @@ class Character {
   get bleedMultiplier() {
     return 1 + this.bleedStacks * BLEED_DAMAGE_PER_STACK;
   }
+
+  // True while this character shrugs off every form of crowd control — stuns, pins, deafens,
+  // transfixes alike. Default false; overridden by states that are supposed to be unstoppable
+  // once committed (the Giant's charge).
+  //
+  // Checked at the point each effect is APPLIED, so an effect that would have landed simply
+  // never starts. It deliberately does not clear anything already running — a state that wants
+  // that does it itself when it begins (see Giant.launchCharge).
+  get immuneToControl() {
+    return false;
+  }
+
+  // Held in place, but NOT dazed: a pinned character can still attack, aim and act — the only
+  // thing it loses is the ability to move itself off the spot. Deliberately distinct from
+  // applyStun (which stops everything) and from applyDeafen/applyTransfix (which are stuns
+  // wearing a different costume). The Earth Mage's sand is the first thing to use it.
+  //
+  // Knockback is suppressed for the duration too, which falls out of `movable` and is what the
+  // effect wants anyway: something pinned to the ground shouldn't slide when hit.
+  applyPin(duration) {
+    if (!this.alive || this.immuneToControl) return;
+    this.pinnedTimer = Math.max(this.pinnedTimer, duration);
+  }
+
+  // `movable` is a getter over a plain backing field rather than a plain property, so a pin can
+  // veto movement without fighting every `this.movable = x` assignment already scattered through
+  // the cast (applyStun/onStunEnd, the Giant's absorb window, and so on) — those all still write
+  // straight through the setter exactly as before.
+  get movable() {
+    return this._movable !== false && this.pinnedTimer <= 0;
+  }
+  set movable(v) { this._movable = v; }
 
   // Applies an external velocity impulse (e.g. an explosion) that gradually fades back to
   // nothing on its own, instead of permanently altering the character's own velocity.
@@ -189,13 +222,24 @@ class Character {
     return false;
   }
 
-  // True while this character has something in flight that still has to resolve before the round
-  // can be called — main.js's checkWinner holds off entirely while either side reports true, the
-  // same way it already waits out a pending self-destruct or live bombs. Meant for effects that
-  // are committed the moment they're launched and shouldn't be cancellable by killing the caster
-  // afterwards (Archer's Sun Shot, once the arrow is away). Default false.
+  // True while this character has something that still has to resolve before the round can be
+  // called — main.js's checkWinner holds off entirely while either side reports true, the same
+  // way it already waits out a pending self-destruct or live bombs. Covers two different things:
+  //
+  //  - a COMMITTED in-flight effect that shouldn't be cancellable by killing whoever launched it
+  //    (Archer's Sun Shot, once the arrow is away — see the override there);
+  //  - this character itself still visibly held by crowd control. A stun/pin animation still
+  //    playing when the KO screen pops up over it reads as the round being called out from under
+  //    something that clearly is not finished yet.
+  //
+  // The CC half only checks `this.alive` — a fighter that died mid-stun has no ticking timer
+  // left to clear (update() bails out the instant !alive), so a dead body's stale stunTimer would
+  // hold the round open forever if that guard were missing.
+  //
+  // Subclasses with their own in-flight effects to add (Archer, the Earth Mage) combine it via
+  // `super.blocksRoundEnd ||`, not replace it outright.
   get blocksRoundEnd() {
-    return false;
+    return this.alive && (this.stunTimer > 0 || this.pinnedTimer > 0);
   }
 
   // Drawn right after the arena/wall-cracks but before EITHER fighter's own body — for anything
@@ -203,6 +247,21 @@ class Character {
   // Mage's lava patches), so both fighters visually stand on top of it instead of it painting
   // over them. Empty for every character that doesn't have any; see main.js's drawFrame.
   drawGroundEffects(ctx) {}
+
+  // Upright props this character owns that stand on the arena floor as separate objects from its
+  // own body — a Bomber's planted bombs, an Earth Mage's stone pillars.
+  //
+  // These have to sort into the SAME depth pass as the fighters, individually. Drawing them
+  // inside the owner's own draw() (which is what Bomber did with its bombs) pins every one of
+  // them to the OWNER's depth, so a bomb planted well in front of the Bomber still rendered at
+  // the Bomber's place in the stack. Returning them here lets each one take its own slot.
+  //
+  // `depthY` is the y the prop should sort AT — normally where it meets the floor. Flat floor
+  // decals (lava, scorch marks, pillar sockets) do NOT belong here: those are painted on the
+  // ground and correctly belong under everything, which is what drawGroundEffects is for.
+  getDepthItems() {
+    return [];
+  }
 
   // The mirror of drawGroundEffects — drawn after BOTH fighters and all the particles, for
   // anything a character puts over the whole scene while the round is still live (see Archer's
@@ -281,6 +340,7 @@ class Character {
   // Knocks this character senseless for `duration` seconds: frozen in place and immune
   // to further knockback until it wears off.
   applyStun(duration) {
+    if (this.immuneToControl) return;
     this.stunTimer = Math.max(this.stunTimer, duration);
     this.vx = 0;
     this.vy = 0;
@@ -364,6 +424,7 @@ class Character {
       this.deafenedTimer -= dt;
       if (this.deafenedTimer <= 0) this.deafenedMax = 0;
     }
+    if (this.pinnedTimer > 0) this.pinnedTimer -= dt;
     if (this.stunTimer > 0) {
       this.stunTimer -= dt;
       if (this.stunTimer <= 0) this.onStunEnd();
@@ -413,6 +474,7 @@ class Character {
       this.drawFieldHpBar(ctx);
       this.drawStunEffect(ctx);
       this.drawDeafenEffect(ctx);
+      this.drawPinEffect(ctx);
     }
   }
 
@@ -561,6 +623,89 @@ class Character {
       ctx.fill();
     }
 
+    ctx.restore();
+  }
+
+  // Pinned: quicksand. A sink hole opened under the character's feet, turning slowly, with the
+  // surface dragging inward and grains circling down into it.
+  //
+  // Deliberately all AT GROUND LEVEL and nothing above the head — every stun-ish cue in this game
+  // (the dizzy spiral, the deafen rings) lives above the head, and a pin is not a daze: the
+  // character is still fighting, it just cannot leave the spot.
+  drawPinEffect(ctx) {
+    if (this.pinnedTimer <= 0) return;
+    const r = this.size / 2;
+    const y = this.y + r * 0.62;
+    const f = Math.min(1, this.pinnedTimer * 4);   // eases out over the last quarter second
+    const t = performance.now() / 1000;
+    const R = r * 1.05;
+
+    ctx.save();
+    ctx.translate(this.x, y);
+    ctx.scale(1, 0.44);                            // one squash, so everything below is a circle
+    ctx.globalAlpha = f;
+
+    // The pool: wet sand at the rim going almost black down the throat of it
+    const pool = ctx.createRadialGradient(0, 0, R * 0.12, 0, 0, R);
+    pool.addColorStop(0, "#241a0d");
+    pool.addColorStop(0.45, "#6b5433");
+    pool.addColorStop(0.82, "#a8874c");
+    pool.addColorStop(1, "rgba(168,135,76,0)");
+    ctx.fillStyle = pool;
+    ctx.beginPath();
+    ctx.arc(0, 0, R, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Surface dragged into a slow spiral. Three arms, each a spiral arc wound inward.
+    ctx.strokeStyle = "rgba(226,198,144,0.5)";
+    ctx.lineWidth = r * 0.055;
+    ctx.lineCap = "round";
+    for (let arm = 0; arm < 3; arm++) {
+      const base = t * 1.5 + (arm / 3) * Math.PI * 2;
+      ctx.beginPath();
+      for (let k = 0; k <= 16; k++) {
+        const u = k / 16;
+        const rad = R * (0.9 - u * 0.62);
+        const ang = base + u * 2.4;
+        const px = Math.cos(ang) * rad, py = Math.sin(ang) * rad;
+        if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+
+    // Grains circling down, each on its own inward spiral so the pool visibly swallows them
+    for (let i = 0; i < 10; i++) {
+      const phase = (t * 0.75 + i / 10) % 1;       // 0 at the rim, 1 at the throat
+      const rad = R * (0.95 - phase * 0.8);
+      const ang = t * 2.2 + i * 2.1 + phase * 3.2;
+      ctx.globalAlpha = f * (1 - phase) * 0.9;
+      ctx.fillStyle = i % 2 ? "#e0c690" : "#c9a86a";
+      ctx.beginPath();
+      ctx.arc(Math.cos(ang) * rad, Math.sin(ang) * rad, r * (0.055 - phase * 0.03), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = f;
+
+    // A raised lip of thrown-up sand around the outside
+    ctx.strokeStyle = "rgba(120,96,54,0.55)";
+    ctx.lineWidth = r * 0.11;
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 0.99, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Sand climbing the character's legs, drawn unsquashed so it stands up off the pool
+    ctx.save();
+    ctx.globalAlpha = f * 0.9;
+    ctx.fillStyle = "#8a6d3c";
+    for (let i = 0; i < 6; i++) {
+      const a = t * 0.9 + (i / 6) * Math.PI * 2;
+      const px = this.x + Math.cos(a) * r * 0.66;
+      const climb = r * (0.16 + 0.1 * Math.sin(t * 3 + i));
+      ctx.beginPath();
+      ctx.ellipse(px, y - climb * 0.5, r * 0.11, climb, Math.cos(a) * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 

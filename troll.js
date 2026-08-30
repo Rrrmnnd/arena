@@ -18,17 +18,15 @@
 // DPS measured against every opponent); what decides a match is purely whether it survives long
 // enough to finish the ~25s it always needs. So HP only ever helps the matchups it was losing,
 // which is exactly what a spread this wide needs.
-// The 200 this character was specified with. It has been up as far as 255, to pay for a rampage
-// that could barely reach its target back when the windup was 1.25s and an in-range crawl cut
-// the chase to 86px/s; with both of those fixed the rampage connects on its own and the number
-// came back down. Traded off against the damage below — see there.
-const TROLL_MAX_HP = 200;
+// 180, down from 200 — the ultimate's own vitality grant (see TROLL_RAGE_HP_GRANT below) is
+// what makes up the difference and more while the rampage is actually up.
+const TROLL_MAX_HP = 180;
 // Slow, but not Giant-slow. The Giant gets away with 140 because it has an 800px/s charge to
 // close with; the Troll has no gap-closer at all, and nothing in this game actively chases —
 // characters wander and collide — so at 190 it simply never reached anyone above its own speed
 // and sat at a 0% win rate against the entire ranged half of the roster. "Slow" is the ATTACK,
 // which is what the design is actually about.
-const TROLL_SPEED  = 250;
+const TROLL_SPEED  = 240;
 // How fast it can swing its body round, in radians per second. facingAngle used to be set
 // straight to atan2 every frame, so a target crossing behind it flipped the sprite between the
 // eight facings in a single frame. At this rate a full 180 takes about 0.45s and visibly sweeps
@@ -126,12 +124,22 @@ const TROLL_ULT_SLEEP    = 4.0;
 // Every point of damage it deals takes this much off the cooldown. Only counts while the
 // cooldown is actually running — during the rampage the cooldown isn't ticking at all, and it
 // is reset to full when the rampage ends, so damage dealt in that window would be thrown away.
+// The rampage swells its body AND its constitution. Casting grants both max and current HP, so
+// the bar gets longer and fills by the same amount at once; when the whole ultimate is over the
+// max drops back but only part of the current HP is taken with it, so the Troll keeps
+// TROLL_RAGE_HP_GRANT - TROLL_RAGE_HP_TAKE of it as a permanent reward for having survived.
+//
+// Worked example: at 130/180 it casts and becomes 175/225; if it is beaten down to 80/225 during
+// the ultimate, it ends on 50/180.
+const TROLL_RAGE_HP_GRANT = 45;  // 180 -> 225 while the ultimate is up
+const TROLL_RAGE_HP_TAKE  = 30;  // leaves GRANT - TAKE = 15 behind as the permanent reward
+
 const TROLL_ULT_CD_PER_DAMAGE = 0.03;
 
 // While rampaging it stops wandering and steers straight at the target. Nothing else in this
 // game chases, so this alone changes the matchup completely — the ranged half of the roster
 // relies on the Troll drifting past them.
-const TROLL_RAGE_SPEED    = 320;  // up from 250
+const TROLL_RAGE_SPEED    = 280;  // up from 240
 const TROLL_RAGE_INTERVAL = 1.5;  // floor only — the 1.65s animation is longer, see below
 // 21/28, against 200 HP: a little less damage bought with a little more staying power than the
 // 24/30 at 190 that came before it.
@@ -213,7 +221,11 @@ class Troll extends Character {
       speed: TROLL_SPEED,
     });
 
+    // Overwritten the instant it has a real opponent to look at (see update()) — this only
+    // matters for the handful of frames before that, and for whichever facing the arm/club draw
+    // in an empty lab/preview with no opponent at all.
     this.facingAngle = Math.random() * Math.PI * 2;
+    this.hasFacedOpponent = false;
     // First attack lands at 0.75s into the round rather than waiting out a full interval or the
     // shared ATTACK_GRACE_DURATION (1.5s) — both would otherwise bind, since the base class
     // seeds attackGraceTimer to 1.5s and canAttack requires it to have run out. Overriding it here
@@ -235,6 +247,9 @@ class Troll extends Character {
     this.roarPulse = 0;
     this.sizeScale = 1;        // eased toward TROLL_RAGE_SIZE_SCALE while the ultimate is up
     this.snoreNode = null;     // the looped snore's audio node while asleep, so it can be stopped
+    this.rageHpGranted = false; // guards the grant/withdraw pair so neither can fire twice
+    this.celebrating = false;   // won the round: plants and roars at the sky, see onVictory
+    this.celebrateTimer = 0;
     this.floorCracks = [];     // { x, y, angle, seed, life } — see spawnFloorCrack / drawGroundEffects
     this.bodySeed = Math.random() * Math.PI * 2;
     this.turnRate = 0;   // rad/sec it is currently rotating at — drives the lean, see drawBody
@@ -288,9 +303,76 @@ class Troll extends Character {
   // is what "it braces and you bounce off it" should do. Written as a getter over the base
   // class's plain property so applyStun/onStunEnd keep working untouched.
   get movable() {
-    return this._movable !== false && !this.planted;
+    // `pinnedTimer` is the base class's own veto (see Character.applyPin) — this override would
+    // otherwise shadow it entirely and make the Troll the one character immune to being pinned.
+    if (this.pinnedTimer > 0) return false;
+    // `rooted` (roar or sleep) belongs here for the same reason `planted` does: moveAndBounce
+    // already refuses to move a rooted Troll (dt forced to 0), but nothing stopped resolveCollision
+    // from still treating it as a MOVABLE body with zero velocity — which is the exact momentum
+    // sink the `planted` fix exists to prevent, just triggered by sleeping into an opponent
+    // instead of by a rampage swing. An opponent that walked into a sleeping Troll had its own
+    // velocity swapped for the Troll's ~0 and came away crawling.
+    return this._movable !== false && !this.planted && !this.rooted;
   }
   set movable(v) { this._movable = v; }
+
+  // Cast: the bar gets longer and fills by the same amount, so the fraction it is on is
+  // unchanged and it reads as raw extra vitality rather than a heal.
+  grantRageVitality() {
+    if (this.rageHpGranted) return;
+    this.rageHpGranted = true;
+    this.maxHp += TROLL_RAGE_HP_GRANT;
+    this.hp += TROLL_RAGE_HP_GRANT;
+  }
+
+  // ...and the whole ultimate ending takes the max back, along with only PART of the current HP.
+  // Clamped at both ends: never above the new (lower) max, and never to zero — a buff wearing off
+  // must not be able to finish the Troll on its own, which it otherwise would any time it came
+  // out of a rampage below TROLL_RAGE_HP_TAKE.
+  withdrawRageVitality() {
+    if (!this.rageHpGranted) return;
+    this.rageHpGranted = false;
+    this.maxHp -= TROLL_RAGE_HP_GRANT;
+    this.hp = Math.max(1, Math.min(this.maxHp, this.hp - TROLL_RAGE_HP_TAKE));
+  }
+
+  // Won the round: plants where it stands and bellows at the sky. Deliberately reuses the
+  // ultimate's own roar clip and sound rings — it is the same animal making the same noise, and
+  // the rings already read as "this is loud" from the rampage.
+  onVictory() {
+    if (this.celebrating) return;
+    this.celebrating = true;
+    this.celebrateTimer = 0;
+    this.roarPulse = 0;
+    this.roarRings.length = 0;
+    this.swingPhase = null;
+    this.stopSnoring();          // it may have won mid-sleep; the snore has to stop either way
+    this.vx = 0;
+    this.vy = 0;
+    this.movable = false;
+    playSfx("trollRoar", 1.0, 0.02);
+  }
+
+  // The victory bellow's own clock: rings leaving the body on the same cadence the ultimate's
+  // roar uses. Runs from update() and needs no opponent.
+  updateCelebration(dt) {
+    this.celebrateTimer += dt;
+    // Turn to face the camera so the open mouth is actually visible — roaring with the back of
+    // its head to the viewer shows nothing. Eased through turnToward like any other turn.
+    this.turnToward(Math.PI / 2, dt);
+    this.roarPulse -= dt;
+    if (this.roarPulse <= 0) {
+      this.roarPulse = 0.3;
+      this.roarRings.push({ life: TROLL_ROAR_RING_LIFE });
+      triggerShake(6, 0.25, true);   // sustained: a held roar must not arm hit-stop every pulse
+      // Well clear of the head: spawned any lower, the burst sits right on top of the face and
+      // hides the open mouth this whole animation exists to show.
+      spawnImpactParticles(this.x, this.y - this.size * 0.95,
+                           ["#ffd08a", "#ff7a2a", TROLL_SKIN_LIGHT], 7, 1.3, -150);
+    }
+    for (const ring of this.roarRings) ring.life -= dt;
+    while (this.roarRings.length && this.roarRings[0].life <= 0) this.roarRings.shift();
+  }
 
   stopSnoring() {
     if (!this.snoreNode) return;
@@ -418,6 +500,12 @@ class Troll extends Character {
     }
     if (!this.alive) return;
 
+    // Celebrating replaces the whole fighting brain — no ultimate clock, no swings, no chasing.
+    if (this.celebrating) {
+      this.updateCelebration(dt);
+      return;
+    }
+
     // The ultimate clock keeps running while stunned; being dazed shouldn't also pause it.
     this.updateUltimate(dt, opponent);
 
@@ -425,6 +513,14 @@ class Troll extends Character {
       const dx = opponent.x - this.x, dy = opponent.y - this.y;
       const dist = Math.hypot(dx, dy);
       this.inRange = dist <= this.attackRange + opponent.size / 2;
+      // The very first time it has an opponent at all, snap straight to facing it instead of
+      // easing in from whatever direction the spawn RNG happened to pick — facingAngle starts
+      // completely unrelated to where the opponent spawns, so every round used to open with a
+      // visible turn-to-face, sometimes most of the way round, before the fight had even begun.
+      if (!this.hasFacedOpponent && dist > 0.01) {
+        this.facingAngle = Math.atan2(dy, dx);
+        this.hasFacedOpponent = true;
+      }
       // Not while the club is in the ground either: the club is committed to swingAngle, so
       // turning the body would twist it out from under itself.
       if (dist > 0.01 && this.swingPhase !== "strike" && this.swingPhase !== "stuck") {
@@ -511,7 +607,6 @@ class Troll extends Character {
         this.ultPhase = "sleep";
         this.ultTimer = TROLL_ULT_SLEEP;
         this.swingPhase = null;       // whatever it was mid-way through, it drops
-        playSfx("absorb", 0.4, 0.2);
         // Looped rather than a one-shot, since TROLL_ULT_SLEEP (4s) can easily outlast a single
         // snore clip. Stopped wherever sleep ends — see below and onDeath.
         this.snoreNode = playSfx("trollSnore", 0.45, 0.05, 0, true);
@@ -522,6 +617,18 @@ class Troll extends Character {
         this.ultPhase = null;
         this.ultCooldown = TROLL_ULT_COOLDOWN;
         this.stopSnoring();
+        this.withdrawRageVitality();
+        // vx/vy is whatever it happened to be the INSTANT the rampage got cut off to start
+        // sleeping — while raging, stepIntoSwing pins it to exactly 0 for the whole of a swing,
+        // and nothing touches it again for the entire 4s sleep (moveAndBounce/restoreOwnSpeed
+        // are both gated on `movable`, which `rooted` forces false the whole time asleep). If the
+        // rampage happened to end mid-swing rather than mid-chase, it woke up with a real,
+        // literal 0 and then just... stayed there — nothing else was ever going to give it a new
+        // heading. Waking up is exactly the moment it needs one, so give it one: walk off in
+        // whatever direction it's currently facing (which has kept tracking the opponent the
+        // whole time asleep, turnToward isn't gated on rooted — see update()).
+        this.vx = Math.cos(this.facingAngle) * this.speed;
+        this.vy = Math.sin(this.facingAngle) * this.speed;
       }
     } else {
       if (this.ultCooldown > 0) this.ultCooldown -= dt;
@@ -530,6 +637,7 @@ class Troll extends Character {
         this.ultTimer = TROLL_ULT_ROAR;
         this.roarPulse = 0;
         this.roarRings.length = 0;
+        this.grantRageVitality();
         playSfx("trollRoar", 1.0, 0.04);
         // Everything in front of it gets its ears blown out for the whole roar — extra bodies (a
         // Ninja's clones) included, since a roar is not aimed at anything in particular. Applied
@@ -858,8 +966,9 @@ class Troll extends Character {
     const r = this.size / 2;
     const t = performance.now() / 1000;
     const v = this.viewParams();
-    const rate = this.sleeping ? 0.55 : this.ultPhase ? 4.2 : 1.1;
-    const amp = this.sleeping ? 0.05 : this.ultPhase ? 0.055 : 0.025;
+    const roaring = this.celebrating || this.ultPhase === "roar";
+    const rate = this.sleeping ? 0.55 : roaring ? 7.5 : this.ultPhase ? 4.2 : 1.1;
+    const amp = this.sleeping ? 0.05 : roaring ? 0.075 : this.ultPhase ? 0.055 : 0.025;
     const breathe = 1 + Math.sin(t * rate + this.bodySeed) * amp;
 
     ctx.save();
@@ -927,6 +1036,15 @@ class Troll extends Character {
     // between the sprite changing pose and the creature actually swinging its weight round.
     const lean = Math.max(-1, Math.min(1, this.turnRate / TROLL_TURN_RATE)) * v.mirror * 0.16;
     ctx.rotate(lean);
+    // Bellowing at the sky: the whole body rocks back off its feet. Rotated about a pivot below
+    // the body rather than its centre, so it tips rather than spins, and eased in over the first
+    // moments of the cry so it swings back rather than snapping there.
+    if (this.celebrating) {
+      const tip = -0.26 * Math.min(1, this.celebrateTimer / 0.3);
+      ctx.translate(0, r * 0.9);
+      ctx.rotate(tip);
+      ctx.translate(0, -r * 0.9);
+    }
     ctx.scale(v.mirror * breathe, breathe);
 
     // Facing away the club is on the far side of the body, so the arm goes behind it and only
@@ -1015,6 +1133,16 @@ class Troll extends Character {
     ctx.restore(); // end squash
   }
 
+  // How wide the jaw is open, 0..1. One value for both places the Troll roars — the ultimate's
+  // opening bellow and the victory cry — so the head only has to be drawn one way.
+  get mouthOpen() {
+    if (this.celebrating) return Math.min(1, this.celebrateTimer / 0.25); // snaps open, stays open
+    if (this.ultPhase !== "roar") return 0;
+    // Eases open over the first fifth of the roar and holds for the rest of it.
+    const into = TROLL_ULT_ROAR - this.ultTimer;
+    return Math.max(0, Math.min(1, into / (TROLL_ULT_ROAR * 0.2)));
+  }
+
   // Brow, eyes and mouth, slid across the face by `turn`.
   drawFace(ctx, r, t, v) {
     const shift = v.turn * 0.2;
@@ -1088,12 +1216,82 @@ class Troll extends Character {
       ctx.ellipse(r * (shift + s * 0.09), r * 0.14, r * 0.045, r * 0.032, s * 0.4, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.strokeStyle = "#15130c";
-    ctx.lineWidth = r * 0.07;
+    const open = this.mouthOpen;
+    if (open <= 0.01) {
+      // Closed: the ordinary snarl, a single heavy line.
+      ctx.strokeStyle = "#15130c";
+      ctx.lineWidth = r * 0.07;
+      ctx.beginPath();
+      ctx.moveTo(r * (shift - 0.22), r * 0.36);
+      ctx.quadraticCurveTo(r * shift, r * 0.5, r * (shift + 0.22), r * 0.36);
+      ctx.stroke();
+      return;
+    }
+    this.drawOpenJaw(ctx, r, shift, open);
+  }
+
+  // A bellowing mouth: the maw itself, a throat darker than it, a tongue, and the lower fangs
+  // riding down with the jaw. Widths are scaled by `open` so it genuinely hinges rather than
+  // popping between two drawings.
+  drawOpenJaw(ctx, r, shift, open) {
+    const cx = r * shift;
+    const top = r * 0.3;
+    const drop = r * (0.16 + 0.42 * open);   // how far the jaw has swung down
+    const halfW = r * (0.17 + 0.11 * open);
+
+    ctx.save();
+    // The maw
+    ctx.fillStyle = "#1b0d0a";
+    ctx.strokeStyle = "#0c0705";
+    ctx.lineWidth = r * 0.035;
     ctx.beginPath();
-    ctx.moveTo(r * (shift - 0.22), r * 0.36);
-    ctx.quadraticCurveTo(r * shift, r * 0.5, r * (shift + 0.22), r * 0.36);
+    ctx.moveTo(cx - halfW, top);
+    ctx.quadraticCurveTo(cx, top - r * 0.04, cx + halfW, top);
+    ctx.quadraticCurveTo(cx + halfW * 0.92, top + drop, cx, top + drop);
+    ctx.quadraticCurveTo(cx - halfW * 0.92, top + drop, cx - halfW, top);
+    ctx.closePath();
+    ctx.fill();
     ctx.stroke();
+
+    // Throat, set back inside it
+    ctx.fillStyle = "#0a0403";
+    ctx.beginPath();
+    ctx.ellipse(cx, top + drop * 0.52, halfW * 0.5, drop * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tongue, low in the jaw
+    ctx.fillStyle = "#8e2f38";
+    ctx.beginPath();
+    ctx.ellipse(cx, top + drop * 0.76, halfW * 0.56, drop * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Lower fangs, hanging from the jawline
+    ctx.fillStyle = TROLL_NAIL;
+    ctx.strokeStyle = TROLL_OUTLINE;
+    ctx.lineWidth = 1.2;
+    for (const sgn of [-1, 1]) {
+      const fx = cx + sgn * halfW * 0.52;
+      const fy = top + drop * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(fx - r * 0.035, fy);
+      ctx.lineTo(fx, fy - r * 0.13 * open);
+      ctx.lineTo(fx + r * 0.035, fy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    // ...and the upper pair biting down into it
+    for (const sgn of [-1, 1]) {
+      const fx = cx + sgn * halfW * 0.62;
+      ctx.beginPath();
+      ctx.moveTo(fx - r * 0.035, top);
+      ctx.lineTo(fx, top + r * 0.14 * open);
+      ctx.lineTo(fx + r * 0.035, top);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // Facing away: no face, just the crown of the head and a pair of ears seen from behind.
