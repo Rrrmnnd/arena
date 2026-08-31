@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Battle Arena</title>
-<link rel="stylesheet" href="style.css?v=399">
+<link rel="stylesheet" href="style.css?v=421">
 </head>
 <body>
 <canvas id="game" width="720" height="1280"></canvas>
@@ -14,47 +14,48 @@
      Starts hidden — press T (in OBS: right-click the source -> Interact, then T) to reveal it for
      setup/troubleshooting; it's not meant to be visible on the actual stream output. -->
 <div id="twitchPanel" class="hidden">
-  <button id="twitchLoginBtn" type="button">Connect Twitch</button>
+  <button id="twitchLoginBtn" type="button">連接 Twitch</button>
   <div id="twitchStatus">尚未連接</div>
-  <label>Reward name: <input id="twitchRewardInput" type="text" placeholder="e.g. Random Battle"></label>
-  <button id="twitchTestBtn" type="button">🎲 Test</button>
-  <button id="twitchResumeBtn" type="button" class="hidden">▶ Resume Waiting</button>
+  <label>兌換獎勵名稱：<input id="twitchRewardInput" type="text" placeholder="例如：隨機對戰"></label>
+  <button id="twitchTestBtn" type="button">🎲 測試</button>
+  <button id="twitchResumeBtn" type="button" class="hidden">▶ 恢復待機</button>
   <!-- OBS's built-in browser (an older Chromium build) frequently can't handle Twitch's own
        login/consent page — the Authorize button ends up stuck greyed-out. Workaround: log in on
        this SAME page but in a normal browser (Chrome/Edge) instead, then copy the token it shows
        you there and paste it in here — the OBS source itself never has to touch Twitch's login
        page at all. -->
   <div id="twitchCopyRow" class="hidden">
-    <label>Token (copy into OBS): <input id="twitchCopyTokenInput" type="text" readonly></label>
-    <button id="twitchCopyTokenBtn" type="button">📋 Copy</button>
+    <label>權杖（複製到 OBS）：<input id="twitchCopyTokenInput" type="text" readonly></label>
+    <button id="twitchCopyTokenBtn" type="button">📋 複製</button>
   </div>
-  <label>Or paste token: <input id="twitchPasteTokenInput" type="text" placeholder="paste token here"></label>
-  <button id="twitchPasteTokenBtn" type="button">🔑 Use pasted token</button>
+  <label>或貼上權杖：<input id="twitchPasteTokenInput" type="text" placeholder="在此貼上權杖"></label>
+  <button id="twitchPasteTokenBtn" type="button">🔑 使用貼上的權杖</button>
 </div>
 <!-- ?v= is bumped by hand whenever any script below changes, so the browser can't serve a
      stale-cached file alongside fresh ones (a mix of old/new files across these tightly
      coupled scripts throws at runtime instead of just looking outdated). -->
-<script src="arena.js?v=399"></script>
-<script src="character.js?v=399"></script>
-<script src="sfx.js?v=399"></script>
-<script src="combat.js?v=399"></script>
-<script src="particles.js?v=399"></script>
-<script src="recorder.js?v=399"></script>
-<script src="giant.js?v=399"></script>
-<script src="punchman.js?v=399"></script>
-<script src="punchman2.js?v=399"></script>
-<script src="demon.js?v=399"></script>
-<script src="bomber.js?v=399"></script>
-<script src="gunner.js?v=399"></script>
-<script src="knight.js?v=399"></script>
-<script src="ninja.js?v=399"></script>
-<script src="virus.js?v=399"></script>
-<script src="firemage.js?v=399"></script>
-<script src="archer.js?v=399"></script>
-<script src="troll.js?v=399"></script>
-<script src="earthmage.js?v=399"></script>
-<script src="lab.js?v=399"></script>
-<script src="twitch.js?v=399"></script>
-<script src="main.js?v=399"></script>
+<script src="arena.js?v=421"></script>
+<script src="character.js?v=421"></script>
+<script src="sfx.js?v=421"></script>
+<script src="combat.js?v=421"></script>
+<script src="particles.js?v=421"></script>
+<script src="recorder.js?v=421"></script>
+<script src="giant.js?v=421"></script>
+<script src="punchman.js?v=421"></script>
+<script src="punchman2.js?v=421"></script>
+<script src="demon.js?v=421"></script>
+<script src="bomber.js?v=421"></script>
+<script src="gunner.js?v=421"></script>
+<script src="knight.js?v=421"></script>
+<script src="ninja.js?v=421"></script>
+<script src="virus.js?v=421"></script>
+<script src="firemage.js?v=421"></script>
+<script src="archer.js?v=421"></script>
+<script src="troll.js?v=421"></script>
+<script src="earthmage.js?v=421"></script>
+<script src="angel.js?v=421"></script>
+<script src="lab.js?v=421"></script>
+<script src="twitch.js?v=421"></script>
+<script src="main.js?v=421"></script>
 </body>
 </html>

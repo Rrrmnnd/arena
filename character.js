@@ -756,7 +756,7 @@ class Character {
     ctx.textAlign = "left";
     ctx.fillStyle = "#ffffff";
     ctx.font = hudNameFont();
-    ctx.fillText(this.alive ? this.name : `${this.name} (Defeated)`, x, y);
+    ctx.fillText(this.alive ? this.name : `${this.name}（已敗）`, x, y);
 
     const barH = 18;
     const barY = y + 14;

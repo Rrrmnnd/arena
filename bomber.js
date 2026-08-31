@@ -140,7 +140,7 @@ class Bomber extends Character {
       size: BOMBER_SIZE,
       color: "#2b2b30",
       maxHp: BOMBER_MAX_HP,
-      name: "Bomber",
+      name: "炸彈客",
       speed: BOMBER_SPEED,
     });
 
@@ -497,6 +497,6 @@ class Bomber extends Character {
   // what's already sitting on the floor waiting to go off.
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
-    if (this.bombs.length) this.drawHudNote(ctx, x, ny, `${this.bombs.length} bombs live`);
+    if (this.bombs.length) this.drawHudNote(ctx, x, ny, `場上 ${this.bombs.length} 顆炸彈`);
   }
 }

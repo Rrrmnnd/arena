@@ -191,7 +191,7 @@ class Virus extends Character {
       size: VIRUS_SIZE,
       color: "#6e5a86",
       maxHp: VIRUS_MAX_HP,
-      name: "Virus",
+      name: "病毒",
       speed: VIRUS_SPEED,
     });
 
@@ -1300,8 +1300,8 @@ class Virus extends Character {
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     if (this.parasitePhase) {
-      const label = this.parasitePhase === "traveling" ? "SWIMMING"
-        : this.parasitePhase === "attached" ? "PARASITIZING" : "RETURNING";
+      const label = this.parasitePhase === "traveling" ? "潛行中"
+        : this.parasitePhase === "attached" ? "寄生中" : "返回中";
       this.drawHudNote(ctx, x, ny, label, "#ff70f0");
     }
   }

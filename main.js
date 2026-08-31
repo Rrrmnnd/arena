@@ -10,19 +10,22 @@ const ROUND_END_GRACE = 3.0; // seconds after a winner is decided before we cut 
 // setup screen while leaving it out of triggerTwitchBattle()'s random draw — for a character
 // that's still new/untested and not meant to show up unannounced on someone's stream yet.
 const ROSTER = [
-  { label: "Giant", ctor: () => new Giant(0, 0) },
-  { label: "Punch Man", ctor: () => new PunchMan(0, 0) },
-  { label: "Demon", ctor: () => new Demon(0, 0) },
-  { label: "Bomber", ctor: () => new Bomber(0, 0) },
-  { label: "Soldier", ctor: () => new Gunner(0, 0) },
-  { label: "Knight", ctor: () => new Knight(0, 0) },
-  { label: "Punch Man (New)", ctor: () => new PunchManNew(0, 0) },
-  { label: "Ninja", ctor: () => new Ninja(0, 0) },
-  { label: "Virus", ctor: () => new Virus(0, 0) },
-  { label: "Fire Mage", ctor: () => new FireMage(0, 0), excludeFromTwitch: true },
-  { label: "Archer", ctor: () => new Archer(0, 0), excludeFromTwitch: true },
-  { label: "Troll", ctor: () => new Troll(0, 0) },
-  { label: "Earth Mage", ctor: () => new EarthMage(0, 0) },
+  { label: "巨人", ctor: () => new Giant(0, 0) },
+  { label: "拳擊手", ctor: () => new PunchMan(0, 0) },
+  { label: "惡魔", ctor: () => new Demon(0, 0) },
+  { label: "炸彈客", ctor: () => new Bomber(0, 0) },
+  { label: "士兵", ctor: () => new Gunner(0, 0) },
+  { label: "騎士", ctor: () => new Knight(0, 0) },
+  { label: "拳擊手 改", ctor: () => new PunchManNew(0, 0) },
+  { label: "忍者", ctor: () => new Ninja(0, 0) },
+  { label: "病毒", ctor: () => new Virus(0, 0) },
+  { label: "火法師", ctor: () => new FireMage(0, 0), excludeFromTwitch: true },
+  { label: "弓箭手", ctor: () => new Archer(0, 0), excludeFromTwitch: true },
+  { label: "巨魔", ctor: () => new Troll(0, 0) },
+  { label: "土法師", ctor: () => new EarthMage(0, 0) },
+  // Brand new and not balance-tested yet, so kept out of the Twitch random draw for now —
+  // same treatment every character gets until its numbers have been measured.
+  { label: "天使", ctor: () => new Angel(0, 0), excludeFromTwitch: true },
 ];
 
 let gameMode = "1v1"; // "1v1" | "vsboss" — which mode is currently toggled in the setup screen
@@ -584,23 +587,23 @@ function drawPromptOverlay(ctx) {
   ctx.textAlign = "center";
   ctx.fillStyle = "#ffdc32";
   ctx.font = "bold 32px Arial";
-  ctx.fillText(winner ? `${winner.name} Wins!` : "Draw!", WIDTH / 2, HEIGHT / 2 - 60);
+  ctx.fillText(winner ? `${winner.name} 獲勝！` : "平手！", WIDTH / 2, HEIGHT / 2 - 60);
 
   ctx.fillStyle = "#ffffff";
   ctx.font = "22px Arial";
-  ctx.fillText(promptReady ? "Keep this recording?" : "Finalizing recording…", WIDTH / 2, HEIGHT / 2 + 10);
+  ctx.fillText(promptReady ? "保留這段錄影？" : "錄影處理中…", WIDTH / 2, HEIGHT / 2 + 10);
 
   if (promptReady) {
     ctx.fillStyle = "#64f064";
     ctx.font = "bold 20px Arial";
-    ctx.fillText("[Y] Keep", WIDTH / 2 - 80, HEIGHT / 2 + 50);
+    ctx.fillText("[Y] 保留", WIDTH / 2 - 80, HEIGHT / 2 + 50);
 
     ctx.fillStyle = "#ff6464";
-    ctx.fillText("[N] Discard", WIDTH / 2 + 80, HEIGHT / 2 + 50);
+    ctx.fillText("[N] 捨棄", WIDTH / 2 + 80, HEIGHT / 2 + 50);
   }
 }
 
-const VS_BOSS_STEP_LABELS = ["pick ALLY 1", "pick ALLY 2", "pick ALLY 3", "pick the BOSS"];
+const VS_BOSS_STEP_LABELS = ["選擇隊友 1", "選擇隊友 2", "選擇隊友 3", "選擇 BOSS"];
 
 function drawToggleButton(ctx, rect, label, active) {
   ctx.fillStyle = active ? "#ffdc32" : "rgba(255,255,255,0.12)";
@@ -623,7 +626,7 @@ function drawSetupOverlay(ctx) {
   ctx.textAlign = "center";
   ctx.fillStyle = "#ffdc32";
   ctx.font = "bold 32px Arial";
-  ctx.fillText("Game Setup", WIDTH / 2, 130);
+  ctx.fillText("對戰設定", WIDTH / 2, 130);
 
   drawToggleButton(ctx, SETUP_MODE_1V1_RECT, "1v1", gameMode === "1v1");
   drawToggleButton(ctx, SETUP_MODE_VSBOSS_RECT, "VS BOSS", gameMode === "vsboss");
@@ -631,21 +634,21 @@ function drawSetupOverlay(ctx) {
 
   ctx.font = "16px Arial";
   ctx.fillStyle = "rgba(255,255,255,0.55)";
-  ctx.fillText("Press Tab to close", WIDTH / 2, 255);
+  ctx.fillText("按 Tab 關閉", WIDTH / 2, 255);
 
   ctx.font = "18px Arial";
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   if (gameMode === "1v1") {
     ctx.fillText(
-      selectA === null ? "Click a fighter to pick the LEFT side" : "Click a fighter to pick the RIGHT side",
+      selectA === null ? "點選角色決定左方" : "點選角色決定右方",
       WIDTH / 2,
       290
     );
   } else if (gameMode === "vsboss") {
     const stepLabel = VS_BOSS_STEP_LABELS[Math.min(vsBossPickStep, 3)];
-    ctx.fillText(`Click a fighter to ${stepLabel}`, WIDTH / 2, 290);
+    ctx.fillText(`點選角色以${stepLabel}`, WIDTH / 2, 290);
   } else {
-    ctx.fillText("Click a fighter to test it in the lab", WIDTH / 2, 290);
+    ctx.fillText("點選角色進入實驗室測試", WIDTH / 2, 290);
   }
 
   ROSTER.forEach((entry, i) => {
@@ -720,21 +723,21 @@ function drawVsBossPromptOverlay(ctx) {
   ctx.font = "bold 32px Arial";
   const title =
     vsBossWinner === "allies" ? "Allies Win!" :
-    vsBossWinner === "boss" ? `${boss.name} (BOSS) Wins!` :
-    "Draw!";
+    vsBossWinner === "boss" ? `${boss.name}（BOSS）獲勝！` :
+    "平手！";
   ctx.fillText(title, WIDTH / 2, HEIGHT / 2 - 60);
 
   ctx.fillStyle = "#ffffff";
   ctx.font = "22px Arial";
-  ctx.fillText(vsBossPromptReady ? "Keep this recording?" : "Finalizing recording…", WIDTH / 2, HEIGHT / 2 + 10);
+  ctx.fillText(vsBossPromptReady ? "保留這段錄影？" : "錄影處理中…", WIDTH / 2, HEIGHT / 2 + 10);
 
   if (vsBossPromptReady) {
     ctx.fillStyle = "#64f064";
     ctx.font = "bold 20px Arial";
-    ctx.fillText("[Y] Keep", WIDTH / 2 - 80, HEIGHT / 2 + 50);
+    ctx.fillText("[Y] 保留", WIDTH / 2 - 80, HEIGHT / 2 + 50);
 
     ctx.fillStyle = "#ff6464";
-    ctx.fillText("[N] Discard", WIDTH / 2 + 80, HEIGHT / 2 + 50);
+    ctx.fillText("[N] 捨棄", WIDTH / 2 + 80, HEIGHT / 2 + 50);
   }
 }
 

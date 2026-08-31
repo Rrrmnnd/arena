@@ -27,7 +27,7 @@ class PunchMan extends Character {
       size: CHAR_BASE_SIZE,
       color: "#e0a030",
       maxHp: PUNCHMAN_MAX_HP,
-      name: "Punch Man",
+      name: "拳擊手",
       speed: 330,
     });
 
@@ -223,7 +223,7 @@ class PunchMan extends Character {
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     if (this.skillState === "rage") {
-      this.drawHudNote(ctx, x, ny, `Rampage ${this.chargeTime.toFixed(1)}s`, "#ff7028");
+      this.drawHudNote(ctx, x, ny, `狂暴 ${this.chargeTime.toFixed(1)}s`, "#ff7028");
     }
   }
 }

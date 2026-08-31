@@ -30,11 +30,11 @@ function gunnerLerp(a, b, t) {
 // final entry is the beam tier instead (see isBeam below) and has no evolveTime — it's the
 // last stop. Every tier fires continuously at its own fireRate — no burst pauses.
 const GUNNER_WEAPON_TIERS = [
-  { name: "Pistol", fireRate: 2,     damage: 1,  evolveTime: 9.0 },  // Pistol->SMG: was 10.0, -1s
-  { name: "SMG",     fireRate: 5.5,  damage: 1,  evolveTime: 13.0 }, // SMG->Rifle: was 15.0, -2s
-  { name: "Rifle",   fireRate: 3,    damage: 4,  evolveTime: 13.0 }, // Rifle->Rocket Launcher: was 16.0, -3s
-  { name: "Rocket Launcher", fireRate: 1 / 3, damage: 20, evolveTime: 18.0 }, // Rocket Launcher->Laser Cannon: was 25dmg/0.25fireRate/16.0s, then 20.0s
-  { name: "Laser Cannon", isBeam: true, tickDamage: 8, tickInterval: 0.25 },
+  { name: "Pistol", label: "手槍", fireRate: 2,     damage: 1,  evolveTime: 9.0 },  // Pistol->SMG: was 10.0, -1s
+  { name: "SMG", label: "衝鋒槍", fireRate: 5.5,  damage: 1,  evolveTime: 13.0 }, // SMG->Rifle: was 15.0, -2s
+  { name: "Rifle", label: "步槍", fireRate: 3,    damage: 4,  evolveTime: 13.0 }, // Rifle->Rocket Launcher: was 16.0, -3s
+  { name: "Rocket Launcher", label: "火箭筒", fireRate: 1 / 3, damage: 20, evolveTime: 18.0 }, // Rocket Launcher->Laser Cannon: was 25dmg/0.25fireRate/16.0s, then 20.0s
+  { name: "Laser Cannon", label: "雷射砲", isBeam: true, tickDamage: 8, tickInterval: 0.25 },
 ];
 
 // Each gun has its own firing sound (the generic "gunnerShoot" placeholder was never backed
@@ -122,7 +122,7 @@ class Gunner extends Character {
       size: GUNNER_SIZE,
       color: "#4a6741",
       maxHp: GUNNER_MAX_HP,
-      name: "Soldier",
+      name: "士兵",
       speed: GUNNER_SPEED,
     });
 
@@ -573,7 +573,7 @@ class Gunner extends Character {
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     const overheated = this.isFinalTier && this.laserOverheated;
-    this.drawHudNote(ctx, x, ny, overheated ? `${this.tier.name} — overheated` : this.tier.name,
+    this.drawHudNote(ctx, x, ny, overheated ? `${this.tier.label} — 過熱` : this.tier.label,
       overheated ? "#ff8866" : "rgba(255,255,255,0.75)");
   }
 }

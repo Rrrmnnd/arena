@@ -302,7 +302,7 @@ function labDrawPanel(ctx) {
   ctx.textAlign = "left";
   ctx.fillStyle = "#ffdc32";
   ctx.font = "bold 20px Arial";
-  ctx.fillText("DUMMY SETUP", LAB_PANEL.x + 16, LAB_PANEL.y + 32);
+  ctx.fillText("木樁設定", LAB_PANEL.x + 16, LAB_PANEL.y + 32);
 
   labDrawRow(ctx, 0, "HP", String(LAB_HP_OPTIONS[labHpIndex]));
   labDrawRow(ctx, 1, "Appears after", `${LAB_DELAY_OPTIONS[labDelayIndex]}s`);
@@ -314,7 +314,7 @@ function labDrawPanel(ctx) {
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(255,255,255,0.45)";
   ctx.font = "13px Arial";
-  ctx.fillText("Click in the arena to place a dummy", LAB_PANEL.x + 16, LAB_PANEL.y + 272);
+  ctx.fillText("點擊場地放置木樁", LAB_PANEL.x + 16, LAB_PANEL.y + 272);
 
   let y = LAB_PANEL.y + 310;
   ctx.strokeStyle = "rgba(255,255,255,0.15)";

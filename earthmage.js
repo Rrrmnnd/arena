@@ -335,7 +335,7 @@ class EarthMage extends Character {
       size: EARTHMAGE_SIZE,
       color: "#a8874c",
       maxHp: EARTHMAGE_MAX_HP,
-      name: "Earth Mage",
+      name: "土法師",
       speed: EARTHMAGE_SPEED,
     });
 
@@ -529,7 +529,7 @@ class EarthMage extends Character {
     const ny = super.drawHud(ctx, x, y, w);
     const standing = this.pillars.filter((p) => p.solid).length;
     if (standing > 0) {
-      this.drawHudNote(ctx, x, ny, `${standing} pillars`, "#c9a86a");
+      this.drawHudNote(ctx, x, ny, `場上 ${standing} 根石柱`, "#c9a86a");
       return ny + 18;
     }
     return ny;

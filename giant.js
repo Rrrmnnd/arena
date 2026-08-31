@@ -48,7 +48,7 @@ class Giant extends Character {
       size: CHAR_BASE_SIZE * 2.5,
       color: "#8a8a78",
       maxHp: 300,
-      name: "Giant",
+      name: "巨人",
       speed: 140,
     });
 
@@ -508,7 +508,7 @@ class Giant extends Character {
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     if (this.skillState === "absorbing") {
-      this.drawHudNote(ctx, x, ny, `Absorbing ${Math.ceil(this.absorbedDamage)}`, "#ffd23c");
+      this.drawHudNote(ctx, x, ny, `吸收中 ${Math.ceil(this.absorbedDamage)}`, "#ffd23c");
     }
   }
 }

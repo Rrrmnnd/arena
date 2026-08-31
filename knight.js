@@ -68,7 +68,7 @@ class Knight extends Character {
       size: CHAR_BASE_SIZE,
       color: "#7a8494",
       maxHp: KNIGHT_MAX_HP,
-      name: "Knight",
+      name: "騎士",
       speed: KNIGHT_BASE_SPEED,
     });
 
@@ -414,6 +414,6 @@ class Knight extends Character {
 
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
-    if (this.mounted) this.drawHudNote(ctx, x, ny, "MOUNTED — one thrust", "#e0b040");
+    if (this.mounted) this.drawHudNote(ctx, x, ny, "騎乘 — 一擊必殺", "#e0b040");
   }
 }
