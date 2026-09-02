@@ -111,7 +111,8 @@ class Ninja extends Character {
       size: CHAR_BASE_SIZE,
       color: "#3a3a46",
       maxHp: NINJA_MAX_HP,
-      name: "忍者",
+      name: "Ninja",
+      nameZh: "忍者",
       speed: NINJA_SPEED,
     });
 
@@ -944,7 +945,8 @@ class Ninja extends Character {
     let ny2 = ny;
     if (this.slashing) {
       this.drawHudNote(ctx, x, ny2,
-        `三段斬 ${this.slashesLanded}/${NINJA_SLASH_COUNT}`, "#ff6060");
+        L(`THREE-SLASH ${this.slashesLanded}/${NINJA_SLASH_COUNT}`,
+          `三段斬 ${this.slashesLanded}/${NINJA_SLASH_COUNT}`), "#ff6060");
       ny2 += 18;
     }
     this.drawCloneHud(ctx, x, ny2, w, this.getExtraBodies());

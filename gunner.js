@@ -122,7 +122,8 @@ class Gunner extends Character {
       size: GUNNER_SIZE,
       color: "#4a6741",
       maxHp: GUNNER_MAX_HP,
-      name: "士兵",
+      name: "Soldier",
+      nameZh: "士兵",
       speed: GUNNER_SPEED,
     });
 
@@ -573,7 +574,8 @@ class Gunner extends Character {
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     const overheated = this.isFinalTier && this.laserOverheated;
-    this.drawHudNote(ctx, x, ny, overheated ? `${this.tier.label} — 過熱` : this.tier.label,
+    this.drawHudNote(ctx, x, ny, overheated ? L(`${this.tier.name} — overheated`, `${this.tier.label} — 過熱`)
+                 : L(this.tier.name, this.tier.label),
       overheated ? "#ff8866" : "rgba(255,255,255,0.75)");
   }
 }

@@ -217,7 +217,8 @@ class Troll extends Character {
       size: TROLL_SIZE,
       color: TROLL_SKIN,
       maxHp: TROLL_MAX_HP,
-      name: "巨魔",
+      name: "Troll",
+      nameZh: "巨魔",
       speed: TROLL_SPEED,
     });
 
@@ -1713,11 +1714,11 @@ class Troll extends Character {
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     if (this.ultPhase === "roar") {
-      this.drawHudNote(ctx, x, ny, "咆哮", "#ffb03c");
+      this.drawHudNote(ctx, x, ny, L("ROAR", "咆哮"), "#ffb03c");
     } else if (this.ultPhase === "rage") {
-      this.drawHudNote(ctx, x, ny, `狂暴 ${this.ultTimer.toFixed(1)}s`, "#ff5a2a");
+      this.drawHudNote(ctx, x, ny, L(`RAMPAGE ${this.ultTimer.toFixed(1)}s`, `狂暴 ${this.ultTimer.toFixed(1)}s`), "#ff5a2a");
     } else if (this.ultPhase === "sleep") {
-      this.drawHudNote(ctx, x, ny, `沉睡 ${this.ultTimer.toFixed(1)}s`, "#6aa8d8");
+      this.drawHudNote(ctx, x, ny, L(`ASLEEP ${this.ultTimer.toFixed(1)}s`, `沉睡 ${this.ultTimer.toFixed(1)}s`), "#6aa8d8");
     }
   }
 }

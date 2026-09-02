@@ -191,7 +191,8 @@ class Virus extends Character {
       size: VIRUS_SIZE,
       color: "#6e5a86",
       maxHp: VIRUS_MAX_HP,
-      name: "病毒",
+      name: "Virus",
+      nameZh: "病毒",
       speed: VIRUS_SPEED,
     });
 
@@ -251,13 +252,25 @@ class Virus extends Character {
     return this.parasitePhase === "traveling" || this.parasitePhase === "attached" || this.parasitePhase === "returning";
   }
 
-  // Liquid with nothing solid to bump into — "traveling"/"returning" only (NOT "attached", which
-  // is fused directly onto the target's own body, not swimming through open space). Arena walls
-  // still apply; see the wall-clamp in each of those branches in update(). Without this, swimming
+  // Liquid with nothing solid to bump into, for the whole span of a Parasitize cast. Arena walls
+  // still apply; see the wall-clamp in each moving branch in update(). Without this, swimming
   // straight through the opponent's hurtbox (or, in VS BOSS, anyone else's) could shove Virus off
   // course or visibly wedge it against them mid-swim.
+  //
+  // "attached" is in here too, and has to be. Fused on, Virus has no body of its own at all — it
+  // is not drawn (see draw()), it is not movable, and its x/y is slaved to a point 0.32 * size
+  // INSIDE the host. That is a permanent 32px overlap, and resolveCollision resolves an overlap
+  // with a fixed body by moving the other one: the host was being shoved ~1900px/sec in one
+  // unchanging direction for the entire hold, which parks it in a corner and holds it there until
+  // the hold ends. It also re-triggered the collision sound and its sparks every HIT_COOLDOWN.
+  //
+  // Only became reachable when the attach phase started riding the host every frame; before that
+  // the anchor stayed at the dive-in point and the host walked out of the overlap within a few
+  // frames. Fusing INTO someone is exactly the case where there is nothing to bump into.
   get phasesThroughCharacters() {
-    return this.parasitePhase === "traveling" || this.parasitePhase === "returning";
+    return this.parasitePhase === "traveling"
+        || this.parasitePhase === "attached"
+        || this.parasitePhase === "returning";
   }
 
   // Every landed hit (melee bump or spike alike) counts toward the next ultimate-cooldown shave —
@@ -773,6 +786,18 @@ class Virus extends Character {
     if (this.parasitePhase === "attached") {
       const target = this.parasiteTarget;
       if (!target || !target.alive) { this.endParasite(); return; }
+
+      // Ride the host. beginAttach() sets this once and nothing used to move it again, on the
+      // reasoning that a fused Virus has no body of its own on screen (see draw()). But its x/y
+      // is still the anchor for anything ELSE attached to this character — the Angel's marking
+      // orbs and its judgement blade both orbit `body.x/y` — and those were left hanging in the
+      // air at the spot where the Virus dived in while the host walked away.
+      //
+      // endParasite() already re-snapped this before launching back out, for exactly the same
+      // staleness ("the liquid visibly launches from stale empty space"); this fixes the hold
+      // itself rather than just its last frame.
+      this.x = target.x + Math.cos(this.parasiteAngle) * this.parasiteRadius;
+      this.y = target.y + Math.sin(this.parasiteAngle) * this.parasiteRadius;
 
       this.parasiteTickTimer -= dt;
       if (this.parasiteTickTimer <= 0) {
@@ -1300,8 +1325,9 @@ class Virus extends Character {
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     if (this.parasitePhase) {
-      const label = this.parasitePhase === "traveling" ? "潛行中"
-        : this.parasitePhase === "attached" ? "寄生中" : "返回中";
+      const label = this.parasitePhase === "traveling" ? L("SWIMMING", "潛行中")
+        : this.parasitePhase === "attached" ? L("PARASITIZING", "寄生中")
+        : L("RETURNING", "返回中");
       this.drawHudNote(ctx, x, ny, label, "#ff70f0");
     }
   }

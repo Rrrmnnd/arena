@@ -127,7 +127,8 @@ class Demon extends Character {
       size: CHAR_BASE_SIZE,
       color: "#8a1030",
       maxHp: DEMON_MAX_HP,
-      name: "惡魔",
+      name: "Demon",
+      nameZh: "惡魔",
       speed: DEMON_SPEED,
     });
 
@@ -665,7 +666,8 @@ class Demon extends Character {
     const ny = super.drawHud(ctx, x, y, w);
     if (this.embeddedTridents.length) {
       this.drawHudNote(ctx, x, ny,
-        `三叉戟 ${this.embeddedTridents.length}/${DEMON_RIP_TRIDENT_COUNT}`, "#ff8a8a");
+        L(`${this.embeddedTridents.length}/${DEMON_RIP_TRIDENT_COUNT} tridents`,
+           `三叉戟 ${this.embeddedTridents.length}/${DEMON_RIP_TRIDENT_COUNT}`), "#ff8a8a");
     }
   }
 }

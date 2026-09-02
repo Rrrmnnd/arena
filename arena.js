@@ -31,6 +31,19 @@ let TITLE_Y = ARENA_LAYOUTS.portrait.titleY;
 let HUD_Y = ARENA_LAYOUTS.portrait.hudY;
 let arenaLayout = "portrait";
 
+// Which language the game DRAWS in. The Twitch overlay is for viewers and is written in
+// Traditional Chinese; everything else — the manual setup screen, ordinary 1v1, the lab — stays
+// English, because that is the language the project itself is written in.
+//
+// Keyed on the layout rather than on a separate setting because the layout IS the distinction:
+// "twitch" is only ever active while an OBS source is showing the arena to an audience (see
+// enterTwitchIdle in twitch.js), and no other mode uses it.
+//
+// Every drawn string that differs goes through here, so there is exactly one place that decides.
+function L(en, zh) {
+  return arenaLayout === "twitch" ? zh : en;
+}
+
 function setArenaLayout(name) {
   const L = ARENA_LAYOUTS[name];
   if (!L || name === arenaLayout) return false;

@@ -39,7 +39,8 @@ const BLEED_DAMAGE_PER_STACK = 0.1; // +10% damage taken per stack, so 5 stacks 
 const BLEED_DURATION         = 6.0;
 
 class Character {
-  constructor({ x, y, size = CHAR_BASE_SIZE, color = "#64c8ff", maxHp = 100, name = "Character", speed = 150 }) {
+  constructor({ x, y, size = CHAR_BASE_SIZE, color = "#64c8ff", maxHp = 100, name = "Character",
+                nameZh = null, speed = 150 }) {
     this.x = x;
     this.y = y;
     this.size = size;
@@ -48,6 +49,9 @@ class Character {
     this.maxHp = maxHp;
     this.hp = maxHp;
     this.name = name;
+    // Shown instead of `name` on the Twitch overlay only — see L() in arena.js. Left null by
+    // anything that has no translation (the lab dummy, the Ninja's clones), which falls back.
+    this.nameZh = nameZh;
     this.alive = true;
 
     // Wanders on its own: starts off in a random direction, bounces off walls
@@ -183,6 +187,12 @@ class Character {
 
   // True once the round-start grace period has elapsed. Subclasses should gate their
   // attack-triggering logic on this so nobody opens fire the instant a round begins.
+  // The name as it should appear on screen right now. Everything that draws a character's name
+  // goes through this rather than reading `name` directly, which stays the stable internal one.
+  get displayName() {
+    return (arenaLayout === "twitch" && this.nameZh) ? this.nameZh : this.name;
+  }
+
   get canAttack() {
     return this.attackGraceTimer <= 0;
   }
@@ -296,6 +306,34 @@ class Character {
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = lineWidth;
     ctx.strokeRect(x, y, w, h);
+  }
+
+  // A temporary shield, in points of damage it will absorb before the health under it is touched.
+  // 0 for every character that has none — the Angel's rite is currently the only source. Drawn as
+  // a white band sitting ON TOP of the health bar, starting where the health ends, so the two read
+  // as one pool with a bright cap rather than as a second bar to keep track of.
+  get shieldPoints() {
+    return 0;
+  }
+
+  drawShieldBand(ctx, x, y, w, h) {
+    const sp = this.shieldPoints;
+    if (sp <= 0) return;
+    // Overlaid on the RIGHT END of the bar, on top of whatever health is there.
+    //
+    // The first version appended it after the health instead, which meant a character at full HP
+    // had no room left and its shield simply did not render — exactly the case that matters most,
+    // since the Angel is usually unhurt when its own rite wards it. Overlaying always shows, and
+    // reads correctly either way: this much of the next hit is eaten before the bar moves.
+    const shFrac = Math.min(1, sp / this.maxHp);
+    const hpFrac = 1 - shFrac;
+    ctx.save();
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x + w * hpFrac, y, w * shFrac, h);
+    ctx.strokeStyle = "rgba(190,214,255,0.9)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + w * hpFrac, y, w * shFrac, h);
+    ctx.restore();
   }
 
   // `colorOverride`: lets a damage-over-time source (Virus's Infection, Fire Mage's lava) tint
@@ -736,6 +774,7 @@ class Character {
     const ratio = Math.max(0, this.hp / this.maxHp);
 
     this.drawBar(ctx, barX, barY, barW, 10, ratio, ratio > 0.5 ? "#50f050" : ratio > 0.3 ? "#ffc832" : "#ff3c3c");
+    this.drawShieldBand(ctx, barX, barY, barW, 10);
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "12px Arial";
@@ -756,12 +795,14 @@ class Character {
     ctx.textAlign = "left";
     ctx.fillStyle = "#ffffff";
     ctx.font = hudNameFont();
-    ctx.fillText(this.alive ? this.name : `${this.name}（已敗）`, x, y);
+    const nm = this.displayName;
+    ctx.fillText(this.alive ? nm : nm + L(" (Defeated)", "（已敗）"), x, y);
 
     const barH = 18;
     const barY = y + 14;
     const ratio = Math.max(0, this.hp / this.maxHp);
     this.drawBar(ctx, x, barY, w, barH, ratio, ratio > 0.5 ? "#50f050" : ratio > 0.3 ? "#ffc832" : "#ff3c3c");
+    this.drawShieldBand(ctx, x, barY, w, barH);
 
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.font = "13px Arial";

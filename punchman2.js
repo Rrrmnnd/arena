@@ -89,7 +89,8 @@ class PunchManNew extends Character {
       // "(New)" is only there to disambiguate the two Punch Men on the setup/select screen
       // (see ROSTER's own separate label in main.js) — everywhere in-game that reads this
       // name directly (HUD, battle title, victory text) should just say "Punch Man".
-      name: "拳擊手",
+      name: "Punch Man",
+      nameZh: "拳擊手",
       speed: PUNCHMAN2_SPEED,
     });
 
@@ -1281,9 +1282,9 @@ class PunchManNew extends Character {
     const ny = super.drawHud(ctx, x, y, w);
     if (this.blitzing) {
       const n = Math.min(this.ultStrikesDone, PUNCHMAN2_ULT_STRIKES);
-      this.drawHudNote(ctx, x, ny, `連段 ${n}/${PUNCHMAN2_ULT_STRIKES}`, "#ffd23c");
+      this.drawHudNote(ctx, x, ny, L(`BLITZ ${n}/${PUNCHMAN2_ULT_STRIKES}`, `連段 ${n}/${PUNCHMAN2_ULT_STRIKES}`), "#ffd23c");
     } else if (this.nextPunchIsHeavy) {
-      this.drawHudNote(ctx, x, ny, "重擊就緒", "#ffd23c");
+      this.drawHudNote(ctx, x, ny, L("HEAVY ready", "重擊就緒"), "#ffd23c");
     }
   }
 }

@@ -112,7 +112,8 @@ class Archer extends Character {
       size: CHAR_BASE_SIZE,
       color: ARCHER_ROBE,
       maxHp: ARCHER_MAX_HP,
-      name: "弓箭手",
+      name: "Archer",
+      nameZh: "弓箭手",
       speed: ARCHER_SPEED,
     });
 
@@ -660,9 +661,10 @@ class Archer extends Character {
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     if (this.ultPhase === "charge") {
-      this.drawHudNote(ctx, x, ny, `日輪箭 ${(ARCHER_ULT_CHARGE - this.ultTimer).toFixed(1)}s`, "#ffd23c");
+      this.drawHudNote(ctx, x, ny, L(`SUN SHOT ${(ARCHER_ULT_CHARGE - this.ultTimer).toFixed(1)}s`,
+          `日輪箭 ${(ARCHER_ULT_CHARGE - this.ultTimer).toFixed(1)}s`), "#ffd23c");
     } else if (this.ultPhase) {
-      this.drawHudNote(ctx, x, ny, "日輪箭 — 來襲", "#ff5a1a");
+      this.drawHudNote(ctx, x, ny, L("SUN SHOT — incoming", "日輪箭 — 來襲"), "#ff5a1a");
     }
   }
 

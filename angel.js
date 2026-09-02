@@ -9,13 +9,12 @@
 // So the Angel's power is an event, and it is the most dramatic one this game's structure allows.
 // The whole game is "first one to die loses". The Angel does not die the first time.
 //
-// White form  — ranged, evasive, takes off periodically and cannot be targeted while airborne.
-// Fallen form — at 0 HP it drops, the halo physically shatters onto the floor, and it stands back
-//               up with black wings: no flight, no second resurrection, but far more dangerous.
+// A fragile ranged caster with two things worth watching: a normal attack that accumulates into
+// a scheduled, unmissable blade, and a rite that walks five spirits round a pentagram inscribed
+// outside the arena and fires the star across the floor in five growing volleys.
 //
-// The two halves deliberately play OPPOSITE ways, so this is not a recolour. White survives by not
-// being where you are aiming; Fallen has no escape left and simply hits harder and faster than
-// anything it is standing next to.
+// It had a second, "fallen" form for a while — at 0 HP it stood back up with black wings instead
+// of dying. That has been removed: it dies at 0 HP like everything else.
 
 // ---------------------------------------------------------------- palette
 const ANGEL_ROBE_LIGHT  = "#ffffff";
@@ -28,24 +27,12 @@ const ANGEL_WING        = "#ffffff";
 const ANGEL_WING_SHADE  = "#ccd7e8";
 const ANGEL_LIGHT       = ["#ffffff", "#ffe9a8", "#ffd968", "#cfe4ff"];
 
-const FALLEN_ROBE_LIGHT = "#6a5f74";
-const FALLEN_ROBE_MID   = "#413a4c";
-const FALLEN_ROBE_SHADE = "#2a2432";
-const FALLEN_ROBE_HEM   = "#17131d";
-const FALLEN_EMBER      = "#ff4a3d";
-const FALLEN_EMBER_DEEP = "#8f1d16";
-const FALLEN_WING       = "#241f2c";
-const FALLEN_WING_SHADE = "#100d15";
-const FALLEN_LIGHT      = ["#ff4a3d", "#ff8a5c", "#5a4660", "#241f2c"];
-
 // The judgement — the orbs and the blade they become — is ONE colour in five values, and the
 // darkest of them is still a bright gold. Nothing in it is brown or black: an earlier pass shaded
 // the fuller with a brown wash and bound the grip in near-black, and against the blade's own glow
 // those read as dirt on a holy object rather than as shading. Depth comes only from where this
 // ramp sits, never from adding darkness.
 //
-// Deliberately shared by BOTH forms. The fallen angel's bolts stay its own red, but what it calls
-// down is the same light it always could — which is the more interesting reading anyway.
 const HOLY_WHITE = "#ffffff";
 const HOLY_PALE  = "#fff8e2";
 const HOLY_LIGHT = "#ffeeb4";
@@ -54,74 +41,81 @@ const HOLY_DEEP  = "#f0b53a";   // the darkest value in the whole object
 
 // ---------------------------------------------------------------- the white form
 const ANGEL_SIZE = CHAR_BASE_SIZE;
-// Below the mage baseline of 100, deliberately: this character effectively has two health bars,
-// so the first one is not allowed to also be an average one. 85 + 40 = 125 total, a little over
-// the roster median of 110, but split so the second half is genuinely fragile.
-const ANGEL_MAX_HP = 85;
+// The mage baseline. It sat at 85 while this character had a second, "fallen" life to fall back
+// on; with that gone it was the lowest pool in the roster with nothing to show for it — measured
+// at 29% overall, 0% against the Archer.
+const ANGEL_MAX_HP = 100;
 const ANGEL_SPEED  = 260;          // between the mages (240) and the Demon (280)
 
-const ANGEL_BOLT_COOLDOWN = 2.2;   // between the Fire Mage's 3.0 and the faster shooters
-const ANGEL_BOLT_DAMAGE   = 9;
-const ANGEL_BOLT_SPEED    = 700;
-const ANGEL_BOLT_RADIUS   = 11;
+// Weak and slow on purpose. The cooldown is also what paces the judgement count — five hits at
+// 2.0s is a 10s build — so almost none of her damage is meant to come from the bolts themselves;
+// they are the timer on the blade they add up to, and the blade is where the weight sits.
+const ANGEL_BOLT_COOLDOWN = 2.0;
+const ANGEL_BOLT_DAMAGE   = 6;
+const ANGEL_BOLT_SPEED    = 850;   // -150
+const ANGEL_BOLT_RADIUS   = 15;   // a heavier mote of light, not a pellet
 const ANGEL_BOLT_LIFE     = 1.6;
 
-// ---------------------------------------------------------------- the guardian
-// A spirit that manifests BEHIND the Angel and closes around it — armour, not a summon. A PASSIVE
-// on a timer, not a cast: an ultimate can go a whole round without firing, and this is the
-// character's rhythm, so it has to be seen every round.
+// ---------------------------------------------------------------- the ultimate: the five rites
+// A pentagram is inscribed around the OUTSIDE of the arena, and five guardian spirits walk it in
+// turn. Each one travels one edge of the ring, stops on the vertex it reaches, and fires a beam
+// straight down the pentagram's own chord — through the arena and out the far side. Five spirits,
+// five chords: by the time the last one fires, the complete star has been drawn across the floor.
 //
-// It replaced flight, and the replacement is deliberate on two counts:
+// A PASSIVE on a timer, not a cast. And deliberately NOT another burst of single-target damage:
+// the judgement blade is already this character's aimed payoff. This one is indiscriminate
+// geometry — the beams go where the star says, not where the enemy is, and the Angel is standing
+// in the same arena. Getting caught by your own rite is the cost of it.
 //
-//  - Flight was this character's only defence, and the guardian takes that slot — but plays the
-//    opposite way. Flight was "you cannot reach me"; the shell is "you can reach me and it will
-//    not get you anywhere". Same job in the kit, completely different fight.
-//  - It must NOT be another burst of damage. The judgement blade is already this character's big
-//    scheduled payoff; a second one would compete with it and neither would land. So the guardian
-//    changes the Angel's STATE instead: a fragile ranged caster becomes something with armour and
-//    reach, which is a change you can see rather than a number going up.
-const ANGEL_SUSANOO_INTERVAL = 9.0;    // between manifestations
-const ANGEL_SUSANOO_SUMMON   = 0.7;    // it builds itself up out of light over this
-const ANGEL_SUSANOO_DURATION = 6.0;    // then holds, unless it is broken first
-const ANGEL_SUSANOO_FADE     = 0.45;   // and dissolves
-// Its own health, spent before the Angel's. Overflow carries through, so one enormous hit is not
-// wholly eaten by a shell with 1 HP left.
-const ANGEL_SUSANOO_HP       = 45;
-// How big it stands relative to the Angel inside it.
-const ANGEL_SUSANOO_SCALE    = 3.4;
-// It carries a blade of the same light the Angel's judgement is made of, and runs people through
-// with it. A thrust rather than a swing: a swing is a hit, but a thrust that stays IN the target
-// is a state — the pinned enemy stands there with a sword of light through it for as long as the
-// guardian cares to hold it, which is the picture worth building the move around.
-const ANGEL_SUSANOO_BLADE_LEN    = 2.35;  // multiples of the shell's radius
-const ANGEL_SUSANOO_BLADE_WIDTH  = 0.15;
-const ANGEL_SUSANOO_THRUST_CD     = 2.6;
-const ANGEL_SUSANOO_THRUST_DAMAGE = 14;
-const ANGEL_SUSANOO_THRUST_REACH  = 1.95;  // multiples of the shell's own radius
-const ANGEL_SUSANOO_THRUST_WINDUP = 0.34;  // blade drawn back, clearly telegraphed
-const ANGEL_SUSANOO_THRUST_DRIVE  = 0.12;  // and then it is fast
-const ANGEL_SUSANOO_THRUST_HOLD   = 1.6;   // run through, held there
-const ANGEL_SUSANOO_THRUST_PULL   = 0.3;   // withdrawn
-// Held in place, but NOT dazed — applyPin, the Earth Mage's mechanic. A target run through can
-// still fight back, which keeps this from being a full lockout on an already-strong character.
-const ANGEL_SUSANOO_PIN = ANGEL_SUSANOO_THRUST_HOLD;
+// The ring is an ELLIPSE, not a circle. A circle enclosing a 600x600 arena needs radius 424, and
+// the canvas is only 720 wide — two of the five vertices would sit off-screen. 348 x 390 is the
+// one shape that puts all five outside the arena and inside the frame; both were measured.
+const ANGEL_ULT_INTERVAL = 16.0;   // between castings
+// ...and every judgement blade that lands takes a second off that wait. The two halves of the kit
+// were independent before; this makes landing the normal attack feed the rite, so a fight where
+// the bolts connect is visibly a fight where the pentagram comes round sooner.
+const ANGEL_ULT_REFUND = 1.0;
+const ANGEL_PENTA_RX     = 348;
+const ANGEL_PENTA_RY     = 390;
+const ANGEL_PENTA_POINTS = 5;
+const ANGEL_RING_FADE    = 0.5;    // the pentagram drawing itself in, and dissolving at the end
 
-// ---------------------------------------------------------------- the fall from grace
-// Phases: "fall" (dropping, dead weight) -> "shatter" (the halo comes apart on the floor)
-// -> "rise" (black wings unfurl). blocksRoundEnd holds the round open for all three, exactly the
-// way it already does for the Archer's sun and the Earth Mage's toppling pillar: a result that is
-// still visibly resolving must not be called.
-const ANGEL_FALL_TIME    = 0.6;
-const ANGEL_SHATTER_TIME = 0.5;
-const ANGEL_RISE_TIME    = 1.2;
-const ANGEL_FALL_GRAVITY = 900;     // px/s^2 while the body drops out of the air
+// The rite is a MARCH, and every spirit moves in step with the others.
+//
+// One volley = brace, fire, walk. Every spirit on the ring fires from the vertex it is standing
+// on, then all of them step to the next vertex together — and only once that step is finished,
+// with the top vertex empty again, does the next spirit appear on it. So the line is always
+// exactly one vertex apart, and the volleys grow 1, 2, 3, 4, 5.
+//
+// The fifth volley is the point of the whole thing: five spirits standing on five vertices firing
+// all five chords at once, which draws the entire star in a single instant and ends the rite.
+//
+// They were previously spawned one-per-beam instead, which put all five on the same edge 0.3s
+// apart: every chord got fired five times over, 21 beams in all, and the star crawled forward one
+// line at a time. Spawning on the STEP rather than on the shot is what makes it a formation.
+const ANGEL_SPIRIT_CHARGE = 0.3;   // held on the vertex, telegraphing the line it is about to fire
+const ANGEL_SPIRIT_FIRE   = 0.4;   // how long the beam itself is live and visible
+const ANGEL_SPIRIT_WALK   = 1.5;   // and then a deliberate walk to the next vertex
+const ANGEL_SPIRIT_SCALE  = 1.5;   // multiples of the Angel's own size
 
-// ---------------------------------------------------------------- the fallen form
-const ANGEL_FALLEN_HP       = 40;
-const ANGEL_FALLEN_SPEED    = 330;  // Punch Man's speed — it closes distance now instead of keeping it
-const ANGEL_FALLEN_DAMAGE   = 16;
-const ANGEL_FALLEN_COOLDOWN = 1.4;
-const ANGEL_FALLEN_BOLT_SPEED = 820;
+const ANGEL_BEAM_DAMAGE = 12;
+// Thrown clear of the line, the way a bomb throws you clear of the blast. Same base strength as
+// the Bomber's 700 and scaled the same way — inversely with the target's size, so a Giant is
+// shoved rather than launched. Pushed PERPENDICULAR to the chord, not along it: what happened to
+// you is that a line swept through where you were standing, so you come out the side of it.
+const ANGEL_BEAM_KNOCKBACK = 700;
+// Half-width of the lethal band. Measured floor coverage as this grew: 20 -> 31%, 34 -> 49%,
+// 44 -> 59%. The five chords still enclose an inner pentagon 109px off centre, so the middle of
+// the arena stays a pocket you can stand in — closing that would need a half-width over 109.
+const ANGEL_BEAM_WIDTH  = 44;
+
+// Catching a beam yourself is not a punishment — it is the other half of the rite. The Angel
+// takes no damage from it and is warded instead: a small white shield, drawn on top of its own
+// health bar. Walking into a second beam ADDS to what is already there and puts the full 7s back
+// on the clock, so standing in the star is a way to build the ward up rather than a way to keep
+// resetting one stack of it.
+const ANGEL_SHIELD_GAIN     = 8;
+const ANGEL_SHIELD_DURATION = 7.0;
 
 // ---------------------------------------------------------------- judgement: marks and the sword
 // Every landed bolt leaves an orb of light circling whoever it hit. The fifth one closes the
@@ -143,7 +137,10 @@ const ANGEL_SWORD_DELAY  = 1.5;    // from the fifth orb to impact, exactly
 const ANGEL_SWORD_GATHER = 0.22;   // orbs fly up and collapse into one light
 const ANGEL_SWORD_FORM   = 0.45;   // through to the blade being fully drawn
 const ANGEL_SWORD_DROP   = 0.18;   // and the drive down at the end
-const ANGEL_SWORD_DAMAGE = 15;
+const ANGEL_SWORD_DAMAGE = 18;
+// Shorter than the roster's other big stuns (the Earth Mage's pillar and Punch Man's finisher are
+// both 2.0s) on purpose: those have to be landed, and this one cannot be dodged at all.
+const ANGEL_SWORD_STUN = 1.2;
 // The blade scales with WHOEVER IT IS AIMED AT — a judgement passed on a Giant is a Giant-sized
 // blade. Multiples of the target's own size, so it always reads as built to that body.
 //
@@ -155,18 +152,31 @@ const ANGEL_SWORD_WIDTH  = 0.225;  // same, keeping the blade's own proportions 
 // How far the point sits above the target's crown while it waits.
 const ANGEL_SWORD_CLEAR  = 14;
 
-// ---------------------------------------------------------------- victory
-const ANGEL_VICTORY_RISE = 1.3;
-const ANGEL_VICTORY_HEIGHT = 150;
+// ---------------------------------------------------------------- victory: the deluge
+// She rises, gathers, and then floods — white pouring out of her body until the frame is drowned
+// in it, and the arena dimming underneath so the only light left in the picture is hers.
+//
+// Deliberately borrows NOTHING from the rite. It used to re-inscribe the pentagram and pour the
+// light out along the star's chords, which made a won round look like a sixth cast rather than
+// the end of the fight. The ring, the chords and the vertex rays are all gone from here; the only
+// geometry in the victory is the Angel herself.
+//
+// Budgeted against ROUND_END_GRACE (3.0s in main.js), which is all the time there is before the
+// round is torn down. Most of that budget goes to the flood itself: it starts as a glow no wider
+// than she is and has to be seen SPREADING, which at 0.8s it was not — it simply arrived.
+const ANGEL_VICTORY_HOLD     = 0.35;  // a beat of her just rising, before the light starts
+const ANGEL_VICTORY_GATHER   = 0.55;
+const ANGEL_VICTORY_FLOOD    = 1.6;
+const ANGEL_VICTORY_RISE     = 1.3;
+const ANGEL_VICTORY_HEIGHT   = 70;   // she lifts a little; the light does the rest
 
 // A single bolt of light. Pure data — see Angel.updateBolts for the flight and the hit.
 class LightBolt {
-  constructor(x, y, vx, vy, fallen) {
+  constructor(x, y, vx, vy) {
     this.x = x;
     this.y = y;
     this.vx = vx;
     this.vy = vy;
-    this.fallen = fallen;
     this.life = ANGEL_BOLT_LIFE;
     this.seed = Math.random() * Math.PI * 2;
     this.spin = Math.random() * Math.PI * 2;
@@ -187,7 +197,8 @@ class Angel extends Character {
       size: ANGEL_SIZE,
       color: ANGEL_ROBE_MID,
       maxHp: ANGEL_MAX_HP,
-      name: "天使",
+      name: "Angel",
+      nameZh: "天使",
       speed: ANGEL_SPEED,
     });
 
@@ -199,25 +210,28 @@ class Angel extends Character {
     this.boltTimer = ANGEL_BOLT_COOLDOWN;   // opens on cooldown rather than firing at the bell
     this.castTimer = 0;                     // >0 while the arm is still extended from a shot
 
-    // The guardian
-    this.susanooPhase = null;               // null | "summon" | "hold" | "fade"
-    this.susanooTimer = ANGEL_SUSANOO_INTERVAL;
+    // The ultimate — see "the five rites" above
+    this.ultActive = false;
+    this.ultTimer = ANGEL_ULT_INTERVAL;     // counts down to the next casting
+    this.ringT = 0;                         // 0..1, the pentagram drawing itself in / out
+    // Spirits ACCUMULATE: one more joins the ring every time a beam goes off, so the rite starts
+    // as a single walker and finishes as five firing over each other. Each one carries its own
+    // clock and its own position on the ring — they are not in step with one another.
+    this.spirits = [];                      // [{ at }] — they share one clock, see updateUltimate
+    this.firedChords = [];                  // which of the five chords have been drawn so far
+    this.ritePhase = null;                  // null | "charge" | "fire" | "walk"
+    this.volley = 0;                        // how many volleys have gone off, 1..5
+    this.starFlash = 0;                     // 1 -> 0 bloom over the whole figure on the last volley
+    this.riteSound = null;                  // looped for exactly as long as the rite lasts
+    this.victorySound = null;               // the deluge cue, held so a round teardown can cut it
     this.phaseTimer = 0;
-    this.shellHp = 0;
-    this.shellCracks = [];                  // fixed fracture lines, grown as the shell is worn down
-    this.thrustTimer = 0;
-    this.thrustPhase = null;                // null | "windup" | "drive" | "held" | "pull"
-    this.thrustTarget = null;               // who is currently on the end of the blade
-    this.thrustAim = 0;                     // the direction it committed to, fixed at the drive
+    this.beams = [];                        // live beams: [{ax,ay,bx,by,t,life,hitAngel,hitFoe}]
+
+    // The ward a beam leaves on the Angel itself
+    this.shieldHp = 0;
+    this.shieldTimer = 0;
     this.lift = 0;                          // drawn height off the floor (the fall, and the victory)
     this.wingPhase = Math.random() * Math.PI * 2;
-
-    // The fall from grace
-    this.fallen = false;
-    this.transformPhase = null;             // null | "fall" | "shatter" | "rise"
-    this.transformTimer = 0;
-    this.fallVel = 0;
-    this.halo = null;                       // once shattered, the pieces left lying on the floor
 
     // Judgement. One record per marked body rather than a counter on this character, because the
     // opponent can be several bodies at once (the Ninja's clones) and each carries its own count.
@@ -233,16 +247,21 @@ class Angel extends Character {
   }
 
   // ---------------------------------------------------------------- form-dependent stats
-  get boltDamage()   { return this.fallen ? ANGEL_FALLEN_DAMAGE : ANGEL_BOLT_DAMAGE; }
-  get boltCooldown() { return this.fallen ? ANGEL_FALLEN_COOLDOWN : ANGEL_BOLT_COOLDOWN; }
-  get boltSpeed()    { return this.fallen ? ANGEL_FALLEN_BOLT_SPEED : ANGEL_BOLT_SPEED; }
-  get palette()      { return this.fallen ? FALLEN_LIGHT : ANGEL_LIGHT; }
+  get boltDamage()   { return ANGEL_BOLT_DAMAGE; }
+  get boltCooldown() { return ANGEL_BOLT_COOLDOWN; }
+  get boltSpeed()    { return ANGEL_BOLT_SPEED; }
+  get palette()      { return ANGEL_LIGHT; }
+
+  // What the white band on the health bar shows — see Character.drawShieldBand.
+  get shieldPoints() {
+    return this.shieldTimer > 0 ? this.shieldHp : 0;
+  }
 
   // ---------------------------------------------------------------- engine hooks
   // Frozen for the whole transformation. Flight deliberately does NOT stop it moving: it drifts
   // around the arena while airborne, which is what makes losing track of it matter.
   get movable() {
-    return super.movable && !this.transformPhase && !this.celebrating;
+    return super.movable && !this.celebrating;
   }
 
   set movable(v) {
@@ -253,355 +272,251 @@ class Angel extends Character {
   // opponent has, for a moment, actually won. See Character.blocksRoundEnd.
   get blocksRoundEnd() {
     return super.blocksRoundEnd
-        || (this.alive && this.transformPhase !== null)
         || this.marks.some((m) => m.sword);   // a blade in the air still has to land
   }
 
-  // Nothing lands on it while it is falling and getting back up. Not a courtesy: without this the
-  // whole mechanic is cancellable by accident. It sits at 0 HP for the ~1.1s before the fallen
-  // form takes over, and takeDamage's saveable check is false by then (transformPhase is set), so
-  // ANY incidental damage in that window — one stray bolt, one tick of lava — killed it outright
-  // and the transformation never finished. Measured: a 5-damage hit 0.33s in was lethal.
-  get damageImmune() {
-    return this.transformPhase !== null;
+  onDeath() {
+    super.onDeath();
+    // The rite goes out with the one who called it. This is the opposite rule to her bolts and her
+    // blades — those are committed physical things that finish landing whatever happens to her —
+    // because the spirits are not objects she threw. They are hers, and there is nothing left to
+    // hold them on the ring.
+    //
+    // The five are dismissed here, each with a burst on the vertex it was standing on so it
+    // dissolves rather than blinking out. What is left — the ring itself and any beam still being
+    // drawn — is handed to fadeRite(), which update() keeps calling after death so the light dies
+    // down over ANGEL_RING_FADE instead of being cut.
+    if (this.ultActive) {
+      for (const sp of this.spirits) {
+        const p = this.spiritPoint(sp);
+        spawnImpactParticles(p.x, p.y, [HOLY_WHITE, HOLY_PALE, HOLY_GOLD], 20, 1.4, 0);
+        spawnFlash(p.x, p.y, HOLY_PALE, ANGEL_SPIRIT_SCALE * this.size * 0.9, 0.3);
+      }
+    }
+    // Also stops the looped rite sound, clears ultActive and empties this.spirits.
+    this.endUltimate();
   }
 
-  // Same window, same reason, via the engine's existing hook: a stun landing mid-fall would still
-  // be running when the fallen form stood up, so it would rise already helpless.
-  get immuneToControl() {
-    return this.transformPhase !== null;
-  }
-
-  // The one that makes the character. The base class kills at 0 HP inside takeDamage, so rather
-  // than duplicating that whole damage pipeline (bleed multiplier, damage numbers, flash) this
-  // lets it run and then takes the death back — which also means the death burst, flash and shake
-  // in Character.onDeath all fire for free, at exactly the right moment.
   takeDamage(dmg, colorOverride = null) {
-    if (this.damageImmune) return;
 
-    // The shell is spent before the body. Overflow carries through rather than being swallowed:
-    // a shell with 3 HP left should not absorb a 40-damage hit in full.
-    if (dmg > 0 && this.shellUp && this.shellHp > 0) {
-      const absorbed = Math.min(this.shellHp, dmg);
-      this.shellHp -= absorbed;
+    // The ward is spent before the body. Overflow carries through rather than being swallowed:
+    // a 2-point shield should not eat a 40-damage hit in full.
+    if (dmg > 0 && this.shieldTimer > 0 && this.shieldHp > 0) {
+      const absorbed = Math.min(this.shieldHp, dmg);
+      this.shieldHp -= absorbed;
       dmg -= absorbed;
-      this.markShellDamage(absorbed);
-      if (this.shellHp <= 0) this.breakShell();
+      spawnImpactParticles(this.x, this.y, [HOLY_WHITE, HOLY_PALE], 8, 1.0, 0);
+      if (this.shieldHp <= 0) { this.shieldHp = 0; this.shieldTimer = 0; }
       if (dmg <= 0.0001) return;
     }
 
-    const wasSaveable = this.alive && !this.fallen && !this.transformPhase;
     super.takeDamage(dmg, colorOverride);
-    if (wasSaveable && !this.alive) {
-      this.alive = true;
-      this.deathFadeTimer = 0;   // the base class started a fade-out; there is nothing to fade
-      this.hp = 0;
-      this.beginFall();
+  }
+
+  // ---------------------------------------------------------------- the ultimate: the five rites
+  // The i-th vertex of the pentagram ring, starting straight above the arena and going clockwise.
+  pentaVertex(i) {
+    const cx = ARENA.x + ARENA.w / 2, cy = ARENA.y + ARENA.h / 2;
+    const a = -Math.PI / 2 + (i % ANGEL_PENTA_POINTS) * Math.PI * 2 / ANGEL_PENTA_POINTS;
+    return { x: cx + Math.cos(a) * ANGEL_PENTA_RX, y: cy + Math.sin(a) * ANGEL_PENTA_RY };
+  }
+
+  // A point part-way along the ring between two adjacent vertices. Interpolated in ANGLE, not in
+  // a straight line between the two points, so the spirit follows the ring instead of cutting the
+  // corner off it.
+  pentaWalk(fromIdx, k) {
+    const cx = ARENA.x + ARENA.w / 2, cy = ARENA.y + ARENA.h / 2;
+    const step = Math.PI * 2 / ANGEL_PENTA_POINTS;
+    const a = -Math.PI / 2 + (fromIdx + k) * step;
+    return { x: cx + Math.cos(a) * ANGEL_PENTA_RX, y: cy + Math.sin(a) * ANGEL_PENTA_RY };
+  }
+
+  // Where one spirit is: on its vertex, or part-way along the edge to the next one. The whole
+  // line walks together, so the phase and timer come from the rite rather than from the spirit.
+  spiritPoint(sp) {
+    const k = this.ritePhase === "walk" ? angelEase(1 - this.phaseTimer / ANGEL_SPIRIT_WALK) : 0;
+    return this.pentaWalk(sp.at, k);
+  }
+
+  // The vertex it is standing on, which is also the one it fires from.
+  spiritVertex(sp) {
+    return sp.at;
+  }
+
+  // The chord a spirit fires down: from its own vertex, across the arena, to the vertex two steps
+  // away. Skipping one vertex is what makes it a pentagram chord rather than an edge of the ring.
+  beamLine(vertexIdx) {
+    const a = this.pentaVertex(vertexIdx);
+    const b = this.pentaVertex(vertexIdx + 2);
+    return { ax: a.x, ay: a.y, bx: b.x, by: b.y };
+  }
+
+  spawnSpirit() {
+    // Always onto the top vertex, and only ever when it is standing empty.
+    this.spirits.push({ at: 0 });
+    const v = this.pentaVertex(0);
+    spawnFlash(v.x, v.y, HOLY_GOLD, this.size * 1.4, 0.3);
+    spawnImpactParticles(v.x, v.y, [HOLY_WHITE, HOLY_PALE, HOLY_GOLD], 18, 1.3, 0);
+  }
+
+  beginUltimate() {
+    this.ultActive = true;
+    // Looped rather than a one-shot, so it fills the rite exactly however long that runs and is
+    // cut by hand the moment it ends — the same pattern the Demon's recalled tridents and the
+    // Earth Mage's rising pillars use for their own sustained sounds.
+    this.stopRiteSound();
+    this.riteSound = playSfx("angelUlt", 0.6, 0.02, 0, true);
+    this.ringT = 0;
+    this.spirits.length = 0;
+    this.firedChords.length = 0;
+    this.beams.length = 0;
+    this.volley = 0;
+    this.ritePhase = "charge";
+    this.phaseTimer = ANGEL_SPIRIT_CHARGE;
+    this.spawnSpirit();
+    triggerShake(5, 0.3, true);   // sustained: scenery arriving, not an impact — no hit-stop
+  }
+
+  // Cuts the rite loop, wherever the rite ends — finishing normally, the caster dying part-way
+  // through, a victory interrupting it, or the whole round being torn down underneath it.
+  stopRiteSound() {
+    if (!this.riteSound) return;
+    try { this.riteSound.stop(); } catch (e) {}
+    this.riteSound = null;
+  }
+
+  // Called by reset() in main.js: a round ending mid-rite would otherwise leave the loop running
+  // with nothing alive that could ever stop it.
+  stopAllRiteSounds() {
+    this.stopRiteSound();
+    if (this.victorySound) {
+      try { this.victorySound.stop(); } catch (e) {}
+      this.victorySound = null;
     }
   }
 
-  // ---------------------------------------------------------------- the fall from grace
-  beginFall() {
-    this.transformPhase = "fall";
-    this.transformTimer = ANGEL_FALL_TIME;
-    this.fallVel = 0;
-    this.vx = 0;
-    this.vy = 0;
-    this.bolts.length = 0;       // nothing it fired before dying should still be in the air
-    this.susanooPhase = null;    // the shell goes with the light, whatever state it was in
-    this.shellHp = 0;
-    this.thrustPhase = null;
-    this.thrustTarget = null;
-    this.castTimer = 0;
-    playSfx("demonUltimate", 0.55);   // PLACEHOLDER: wants its own "the light goes out" cue
+  endUltimate() {
+    this.stopRiteSound();
+    this.ultActive = false;
+    this.ritePhase = null;
+    this.spirits.length = 0;
+    this.ultTimer = ANGEL_ULT_INTERVAL;
   }
 
-  updateTransform(dt) {
-    this.transformTimer -= dt;
+  // The tail end of the rite, running on a dead Angel. updateUltimate() is unreachable below the
+  // alive gate in update(), so without this the ring would sit on the floor at full brightness and
+  // the last beam would hang half-drawn for the rest of the round. Deliberately does nothing but
+  // wind things down: no phases, no volleys, no new spirits, and no restarting the cooldown.
+  fadeRite(dt) {
+    this.ringT = Math.max(0, this.ringT - dt / ANGEL_RING_FADE);
+    if (this.starFlash > 0) this.starFlash = Math.max(0, this.starFlash - dt / 0.7);
+    for (let i = this.beams.length - 1; i >= 0; i--) {
+      this.beams[i].t += dt;
+      if (this.beams[i].t >= this.beams[i].life) this.beams.splice(i, 1);
+    }
+  }
 
-    if (this.transformPhase === "fall") {
-      // Dead weight. If it was airborne when it died it drops the whole way, which is why this
-      // integrates rather than tweening — the distance is different every time.
-      this.fallVel += ANGEL_FALL_GRAVITY * dt;
-      this.lift = Math.max(0, this.lift - this.fallVel * dt);
-      if (Math.random() < 0.5) {
-        spawnImpactParticles(this.x + (Math.random() - 0.5) * this.size,
-                             this.y - this.lift, ANGEL_LIGHT, 2, 0.8, 90);
+  fireBeam(vertexIdx, opponent) {
+    const ln = this.beamLine(vertexIdx);
+    this.beams.push({ ...ln, t: 0, life: ANGEL_SPIRIT_FIRE });
+    if (!this.firedChords.includes(vertexIdx)) this.firedChords.push(vertexIdx);
+
+    // Everything standing on the line is caught, the Angel included. Resolved once, on the frame
+    // it fires — the beam is instantaneous; its life is only how long it is drawn.
+    const bodies = [];
+    if (opponent && opponent.alive) bodies.push(opponent, ...opponent.getExtraBodies());
+    bodies.push(this, ...this.getExtraBodies());
+    for (const t of bodies) {
+      if (!t || !t.alive) continue;
+      if (pointToSegmentDistance(t.x, t.y, ln.ax, ln.ay, ln.bx, ln.by) > ANGEL_BEAM_WIDTH + t.size * 0.5) continue;
+      if (t === this) {
+        this.gainShield();
+      } else {
+        t.takeDamage(ANGEL_BEAM_DAMAGE, HOLY_LIGHT);
+        // Out the side of the beam. The sign of the cross product says which side of the chord it
+        // is standing on, so it is always pushed the short way out rather than back through.
+        const bx = ln.bx - ln.ax, by = ln.by - ln.ay;
+        const bl = Math.hypot(bx, by) || 1;
+        const cross = (bx * (t.y - ln.ay) - by * (t.x - ln.ax));
+        const side = cross >= 0 ? 1 : -1;
+        const kb = ANGEL_BEAM_KNOCKBACK * (CHAR_BASE_SIZE / t.size);
+        t.applyKnockback(-by / bl * side, bx / bl * side, kb);
+        spawnImpactParticles(t.x, t.y, [HOLY_WHITE, HOLY_PALE, HOLY_GOLD], 26, 1.6, 0);
+        spawnFlash(t.x, t.y, HOLY_WHITE, t.size * 1.4, 0.22);
       }
-      if (this.lift <= 0 && this.transformTimer <= 0) {
-        this.transformPhase = "shatter";
-        this.transformTimer = ANGEL_SHATTER_TIME;
-        this.shatterHalo();
-      }
+    }
+  }
+
+  // Warded rather than hurt. Stacks, and every new beam refreshes the whole timer — walking two
+  // lines at once should read as being twice as protected, not as restarting from five again.
+  gainShield() {
+    this.shieldHp += ANGEL_SHIELD_GAIN;
+    this.shieldTimer = ANGEL_SHIELD_DURATION;
+    spawnFlash(this.x, this.y, HOLY_WHITE, this.size * 1.5, 0.28);
+    spawnImpactParticles(this.x, this.y, [HOLY_WHITE, HOLY_PALE], 20, 1.3, 270);
+  }
+
+  updateUltimate(dt, opponent) {
+    // The ward runs on its own clock, whether or not the rite is still going
+    if (this.shieldTimer > 0) {
+      this.shieldTimer -= dt;
+      if (this.shieldTimer <= 0) { this.shieldTimer = 0; this.shieldHp = 0; }
+    }
+
+    // Beams keep fading even after the rite ends, so the last volley is never cut off mid-draw
+    for (let i = this.beams.length - 1; i >= 0; i--) {
+      this.beams[i].t += dt;
+      if (this.beams[i].t >= this.beams[i].life) this.beams.splice(i, 1);
+    }
+
+    if (!this.ultActive) {
+      this.ringT = Math.max(0, this.ringT - dt / ANGEL_RING_FADE);
+      this.ultTimer -= dt;
+      if (this.ultTimer <= 0 && this.canAttack) this.beginUltimate();
       return;
     }
 
-    if (this.transformPhase === "shatter") {
-      if (this.transformTimer <= 0) {
-        this.transformPhase = "rise";
-        this.transformTimer = ANGEL_RISE_TIME;
-        this.beginFallen();
-      }
-      return;
-    }
-
-    if (this.transformPhase === "rise") {
-      // Embers streaming off the new wings as they unfurl
-      if (Math.random() < 0.6) {
-        spawnImpactParticles(this.x + (Math.random() - 0.5) * this.size * 1.6,
-                             this.y - this.size * 0.2, FALLEN_LIGHT, 2, 0.9, 270);
-      }
-      if (this.transformTimer <= 0) {
-        this.transformPhase = null;
-        triggerShake(7, 0.3);
-      }
-    }
-  }
-
-  // The halo comes off and stays on the floor for the rest of the round. Same idea as the Earth
-  // Mage's pillars: the arena should carry evidence of what happened in it.
-  shatterHalo() {
-    this.halo = {
-      x: this.x,
-      y: this.y + this.size * 0.35,
-      seed: Math.random() * Math.PI * 2,
-      // Broken into arcs rather than dust, so it still reads as a ring that was broken
-      shards: Array.from({ length: 5 }, (_, i) => ({
-        a0: (i / 5) * Math.PI * 2 + Math.random() * 0.2,
-        span: Math.PI * 2 / 5 * (0.55 + Math.random() * 0.25),
-        off: (Math.random() - 0.5) * 10,
-        rot: (Math.random() - 0.5) * 0.5,
-      })),
-    };
-    playSfx("wallSlam", 0.6);        // PLACEHOLDER: wants a glass/bell shatter
-    spawnFlash(this.x, this.y, "#ffffff", this.size * 2.2, 0.3);
-    spawnImpactParticles(this.x, this.y, ANGEL_LIGHT, 34, 1.6, 90);
-    triggerShake(9, 0.35);
-  }
-
-  beginFallen() {
-    this.fallen = true;
-    this.hp = ANGEL_FALLEN_HP;
-    this.maxHp = ANGEL_FALLEN_HP;   // the bar refills as the new, smaller pool — not a heal
-    this.color = FALLEN_ROBE_MID;
-    this.name = "Fallen Angel";
-    this.speed = ANGEL_FALLEN_SPEED;
-    this.boltTimer = this.boltCooldown * 0.5;   // half a beat before it starts hitting back
-    this.susanooTimer = Infinity;               // nothing left to call on
-    playSfx("demonWings", 0.8);
-    spawnFlash(this.x, this.y, FALLEN_EMBER, this.size * 2.4, 0.35);
-  }
-
-  // ---------------------------------------------------------------- the guardian
-  get shellUp() {
-    return this.susanooPhase === "hold" || this.susanooPhase === "summon";
-  }
-
-  // 0..1, how far the shell has built itself / how much is left of it while dissolving.
-  get shellForm() {
-    if (this.susanooPhase === "summon") return angelEase(1 - this.phaseTimer / ANGEL_SUSANOO_SUMMON);
-    if (this.susanooPhase === "hold") return 1;
-    if (this.susanooPhase === "fade") return angelEase(this.phaseTimer / ANGEL_SUSANOO_FADE);
-    return 0;
-  }
-
-  get shellRadius() {
-    return this.size * 0.5 * ANGEL_SUSANOO_SCALE;
-  }
-
-  summonSusanoo() {
-    this.susanooPhase = "summon";
-    this.phaseTimer = ANGEL_SUSANOO_SUMMON;
-    this.shellHp = ANGEL_SUSANOO_HP;
-    this.thrustTimer = ANGEL_SUSANOO_THRUST_CD * 0.45;
-    this.thrustPhase = null;
-    this.thrustTarget = null;
-    // Fracture lines are fixed the moment it forms, and simply become visible as it is worn down —
-    // so the same shell always breaks along the same seams instead of the cracks crawling about.
-    this.shellCracks = Array.from({ length: 9 }, () => ({
-      a: Math.random() * Math.PI * 2,
-      r0: 0.25 + Math.random() * 0.4,
-      len: 0.3 + Math.random() * 0.45,
-      bend: (Math.random() - 0.5) * 0.9,
-      at: Math.random(),            // fraction of damage taken before this one shows
-    }));
-    playSfx("demonWings", 0.65);          // PLACEHOLDER: wants its own manifestation cue
-    spawnFlash(this.x, this.y, HOLY_GOLD, this.shellRadius * 1.5, 0.3);
-    spawnImpactParticles(this.x, this.y, [HOLY_WHITE, HOLY_PALE, HOLY_GOLD], 26, 1.5, 90);
-    triggerShake(6, 0.3, true);   // sustained: something arriving, not an impact — no hit-stop
-  }
-
-  markShellDamage(amount) {
-    spawnImpactParticles(this.x + (Math.random() - 0.5) * this.shellRadius,
-                         this.y + (Math.random() - 0.5) * this.shellRadius,
-                         [HOLY_WHITE, HOLY_PALE, HOLY_GOLD], Math.min(14, 3 + amount), 1.1, 0);
-  }
-
-  breakShell() {
-    this.susanooPhase = null;
-    this.susanooTimer = ANGEL_SUSANOO_INTERVAL;
-    this.thrustPhase = null;
-    this.thrustTarget = null;
-    this.shellHp = 0;
-    playSfx("wallSlam", 0.7);              // PLACEHOLDER: wants a glass-shatter
-    spawnFlash(this.x, this.y, HOLY_WHITE, this.shellRadius * 1.8, 0.32);
-    spawnImpactParticles(this.x, this.y, [HOLY_WHITE, HOLY_PALE, HOLY_GOLD, HOLY_DEEP], 40, 1.9, 0);
-    triggerShake(10, 0.32);
-  }
-
-  updateSusanoo(dt, opponent) {
-    if (this.susanooPhase === null) {
-      if (this.fallen) return;             // the fallen form has nothing left to call
-      this.susanooTimer -= dt;
-      if (this.susanooTimer <= 0 && this.canAttack) this.summonSusanoo();
-      return;
-    }
-
+    this.ringT = Math.min(1, this.ringT + dt / ANGEL_RING_FADE);
+    if (this.starFlash > 0) this.starFlash = Math.max(0, this.starFlash - dt / 0.7);
     this.phaseTimer -= dt;
-    if (this.susanooPhase === "summon" && this.phaseTimer <= 0) {
-      this.susanooPhase = "hold";
-      this.phaseTimer = ANGEL_SUSANOO_DURATION;
-    } else if (this.susanooPhase === "hold" && this.phaseTimer <= 0) {
-      this.susanooPhase = "fade";
-      this.phaseTimer = ANGEL_SUSANOO_FADE;
-    } else if (this.susanooPhase === "fade" && this.phaseTimer <= 0) {
-      this.susanooPhase = null;
-      this.susanooTimer = ANGEL_SUSANOO_INTERVAL;
-      this.shellHp = 0;
-    }
+    if (this.phaseTimer > 0) return;
 
-    if (this.susanooPhase === "hold") this.updateThrust(dt, opponent);
-  }
+    if (this.ritePhase === "charge") {
+      // The whole line fires at once, each from its own vertex
+      this.ritePhase = "fire";
+      this.phaseTimer = ANGEL_SPIRIT_FIRE;
+      this.volley++;
+      for (const sp of this.spirits) this.fireBeam(sp.at, opponent);
+      playSfx("angelUltLaser", 0.55);      // once per volley, not once per beam
 
-  // Where the guardian's blade currently is: a point (base) and a direction, in world space.
-  // One place computes it, so what the physics runs the target through is exactly what is drawn.
-  bladePose() {
-    const R = this.shellRadius;
-    const aim = this.thrustPhase ? this.thrustAim : this.facingAngle;
-    let ext;                       // how far the arm has pushed the blade out, in shell radii
-    switch (this.thrustPhase) {
-      case "windup": ext = -0.35 * angelEase(1 - this.thrustTimer / ANGEL_SUSANOO_THRUST_WINDUP); break;
-      case "drive":  ext = -0.35 + 1.35 * angelEase(1 - this.thrustTimer / ANGEL_SUSANOO_THRUST_DRIVE); break;
-      case "held":   ext = 1.0; break;
-      case "pull":   ext = 1.0 * angelEase(this.thrustTimer / ANGEL_SUSANOO_THRUST_PULL); break;
-      default:       ext = 0;
-    }
-    // The HAND, not the tip. At (0.55 + ext*0.95) this reached 1.5R at full extension — further
-    // out than the target it was aiming at, so the blade began BEYOND the enemy and drew away from
-    // it. Measured: target 120px away, blade base 153px away, 53px off the blade line, no contact.
-    const reachOut = R * (0.5 + ext * 0.35);
-    return {
-      x: this.x + Math.cos(aim) * reachOut,
-      y: this.y - this.lift + Math.sin(aim) * reachOut - R * 0.28,
-      aim,
-      len: R * ANGEL_SUSANOO_BLADE_LEN,
-      w: R * ANGEL_SUSANOO_BLADE_WIDTH,
-      ext,
-    };
-  }
-
-  // Thrust, run through, hold, withdraw. The blade STAYS in the target for the whole hold, and the
-  // target is pinned for exactly as long — so the pin is not an invisible status, it is the sword
-  // you can see sticking out of them.
-  updateThrust(dt, opponent) {
-    if (!opponent || !opponent.alive) {
-      this.thrustPhase = null;
-      this.thrustTarget = null;
-      return;
-    }
-
-    if (this.thrustPhase === null) {
-      if (this.thrustTimer > 0) this.thrustTimer -= dt;
-      const d = Math.hypot(opponent.x - this.x, opponent.y - this.y);
-      if (this.thrustTimer <= 0 && d <= this.shellRadius * ANGEL_SUSANOO_THRUST_REACH) {
-        this.thrustPhase = "windup";
-        this.thrustTimer = ANGEL_SUSANOO_THRUST_WINDUP;
-        playSfx("archerUltCharge", 0.4);     // PLACEHOLDER
+        triggerShake(6 + this.spirits.length * 1.6, 0.28);
+      // The last volley is five chords at once and completes the figure — it gets its own bloom
+      // over the middle of the arena so the climax reads as one event rather than five beams.
+      if (this.volley >= ANGEL_PENTA_POINTS) {
+        this.starFlash = 1;
+        spawnFlash(ARENA.x + ARENA.w / 2, ARENA.y + ARENA.h / 2, HOLY_WHITE, ARENA.w * 0.55, 0.45);
+        triggerShake(16, 0.4);
       }
       return;
     }
 
-    this.thrustTimer -= dt;
-
-    if (this.thrustPhase === "windup") {
-      // Still tracking while it winds up — the direction is only committed when it drives
-      // Aimed from the BLADE's own height, not from the body's centre. The guardian holds it at
-      // chest level (R*0.28 above centre), so aiming from the centre left the blade running
-      // parallel to the target and 29px over its middle — it grazed rather than ran through.
-      this.thrustAim = Math.atan2(opponent.y - (this.y - this.lift - this.shellRadius * 0.28),
-                                  opponent.x - this.x);
-      if (this.thrustTimer <= 0) {
-        this.thrustPhase = "drive";
-        this.thrustTimer = ANGEL_SUSANOO_THRUST_DRIVE;
-        this.thrustTarget = null;
-        playSfx("trollWave", 0.6);           // PLACEHOLDER
-      }
+    if (this.ritePhase === "fire") {
+      // The fifth volley is every spirit on every vertex — the star is complete and it is done
+      if (this.volley >= ANGEL_PENTA_POINTS) { this.endUltimate(); return; }
+      this.ritePhase = "walk";
+      this.phaseTimer = ANGEL_SPIRIT_WALK;
       return;
     }
 
-    if (this.thrustPhase === "drive") {
-      // Anything along the blade's line gets run through, once
-      if (!this.thrustTarget) {
-        const R_CHEST = this.shellRadius * 0.15;
-        const p = this.bladePose();
-        const tipX = p.x + Math.cos(p.aim) * p.len;
-        const tipY = p.y + Math.sin(p.aim) * p.len;
-        // Tested from the guardian's CHEST rather than from the hand. The drawn blade starts at
-        // the hand, but the arm driving it occupies the space behind that — without this, anything
-        // standing closer than the hand sits in a dead zone in front of a sword being thrust at it.
-        const baseX = this.x + Math.cos(p.aim) * R_CHEST;
-        const baseY = this.y - this.lift + Math.sin(p.aim) * R_CHEST - this.shellRadius * 0.28;
-        const targets = [opponent, ...opponent.getExtraBodies()].filter((t) => t.alive);
-        for (const t of targets) {
-          if (pointToSegmentDistance(t.x, t.y, baseX, baseY, tipX, tipY) > t.size * 0.5) continue;
-          t.takeDamage(ANGEL_SUSANOO_THRUST_DAMAGE, HOLY_LIGHT);
-          t.applyPin(ANGEL_SUSANOO_PIN);
-          this.thrustTarget = t;
-          playSfx("archerBowHit", 0.7);      // PLACEHOLDER
-          spawnFlash(t.x, t.y, HOLY_WHITE, t.size * 1.5, 0.24);
-          spawnImpactParticles(t.x, t.y, [HOLY_WHITE, HOLY_PALE, HOLY_GOLD], 28, 1.7, 0);
-          triggerShake(9, 0.26);
-          break;
-        }
-      }
-      if (this.thrustTimer <= 0) {
-        this.thrustPhase = "held";
-        // If it hit, hold exactly as long as the pin lasts; if it missed, recover quickly instead
-        // of standing there with the blade out for a second and a half for nothing.
-        this.thrustTimer = this.thrustTarget ? ANGEL_SUSANOO_THRUST_HOLD : 0.18;
-      }
-      return;
+    // walk finished: everyone steps on, and only now is the top vertex free for the next spirit
+    for (const sp of this.spirits) {
+      sp.at = (sp.at + 1) % ANGEL_PENTA_POINTS;
+      const v = this.pentaVertex(sp.at);
+      spawnImpactParticles(v.x, v.y, [HOLY_WHITE, HOLY_PALE, HOLY_GOLD], 10, 1.0, 270);
     }
-
-    if (this.thrustPhase === "held") {
-      const t = this.thrustTarget;
-      if (t && t.alive) {
-        // Refreshed every frame so the pin can never outlast the blade, or the blade the pin
-        t.applyPin(Math.max(0.08, this.thrustTimer));
-        if (Math.random() < 0.4) {
-          spawnImpactParticles(t.x, t.y, [HOLY_WHITE, HOLY_PALE], 2, 0.9, 0);
-        }
-      } else if (t) {
-        this.thrustTarget = null;
-      }
-      if (this.thrustTimer <= 0) {
-        this.thrustPhase = "pull";
-        this.thrustTimer = ANGEL_SUSANOO_THRUST_PULL;
-        if (this.thrustTarget) {
-          spawnImpactParticles(this.thrustTarget.x, this.thrustTarget.y,
-                               [HOLY_WHITE, HOLY_GOLD], 16, 1.3, 0);
-          playSfx("earthmageSand", 0.4);     // PLACEHOLDER: the blade coming back out
-        }
-      }
-      return;
-    }
-
-    // pull
-    if (this.thrustTimer <= 0) {
-      this.thrustPhase = null;
-      this.thrustTarget = null;
-      this.thrustTimer = ANGEL_SUSANOO_THRUST_CD;
-    }
+    if (this.spirits.length < ANGEL_PENTA_POINTS) this.spawnSpirit();
+    this.ritePhase = "charge";
+    this.phaseTimer = ANGEL_SPIRIT_CHARGE;
   }
 
   // ---------------------------------------------------------------- attack
@@ -610,9 +525,12 @@ class Angel extends Character {
     const dx = opponent.x - tip.x, dy = opponent.y - tip.y;
     const d = Math.hypot(dx, dy) || 1;
     const sp = this.boltSpeed;
-    this.bolts.push(new LightBolt(tip.x, tip.y, dx / d * sp, dy / d * sp, this.fallen));
+    this.bolts.push(new LightBolt(tip.x, tip.y, dx / d * sp, dy / d * sp));
     this.castTimer = 0.22;
-    playSfx("archerBow", this.fallen ? 0.5 : 0.4);   // PLACEHOLDER: wants its own release cue
+    // Quiet on purpose. The release clip runs 1.7s but the bolt crosses a typical engagement in
+    // about 0.3s, so this is still playing underneath the landing cue for almost its whole length —
+    // it has to sit under that rather than compete with it. Roster range for a release is 0.3-0.6.
+    playSfx("angelShoot", 0.28);
     spawnImpactParticles(tip.x, tip.y, this.palette, 8, 0.9, 0);
   }
 
@@ -637,11 +555,11 @@ class Angel extends Character {
         const targets = [opponent, ...opponent.getExtraBodies()].filter((t) => t.alive);
         for (const t of targets) {
           if (Math.hypot(t.x - b.x, t.y - b.y) > t.size / 2 + ANGEL_BOLT_RADIUS) continue;
-          t.takeDamage(this.boltDamage, this.fallen ? FALLEN_EMBER : ANGEL_GOLD);
+          t.takeDamage(this.boltDamage, ANGEL_GOLD);
           this.addMark(t);
-          playSfx("archerBowHit", 0.45);   // PLACEHOLDER
+          playSfx("angelHit", 0.5);
           spawnImpactParticles(b.x, b.y, this.palette, 16, 1.3, 0);
-          spawnFlash(b.x, b.y, this.fallen ? FALLEN_EMBER : "#ffe9a8", t.size * 0.8, 0.16);
+          spawnFlash(b.x, b.y, "#ffe9a8", t.size * 0.8, 0.16);
           gone = true;
           break;
         }
@@ -668,7 +586,9 @@ class Angel extends Character {
     // Fifth orb: the blade is committed from here. The orbs are kept, not discarded — they are
     // what visibly converges into it during the forming phase.
     m.sword = { t: 0 };
-    playSfx("archerUltCharge", 0.5);     // PLACEHOLDER: wants its own "judgement passed" cue
+    // Louder than the landing that follows it. This is the announcement — the moment the count
+    // closes and the result is already decided — and the 1.5s hang after it is dead air otherwise.
+    playSfx("angelSword", 0.75);
   }
 
   updateMarks(dt) {
@@ -687,7 +607,11 @@ class Angel extends Character {
       // target running does not change where the blade lands, only what it lands on top of.
       const b = m.body;
       b.takeDamage(ANGEL_SWORD_DAMAGE, HOLY_LIGHT);
-      playSfx("archerSunCrash", 0.6);    // PLACEHOLDER
+      b.applyStun(ANGEL_SWORD_STUN);
+      playSfx("angelSwordHit", 0.6);
+      // Feeds the rite. Only while it is off cooldown — shaving time off a rite that is already
+      // running would do nothing, and could hand it a negative timer to climb back out of.
+      if (!this.ultActive) this.ultTimer = Math.max(0, this.ultTimer - ANGEL_ULT_REFUND);
       spawnFlash(b.x, b.y, "#ffffff", b.size * 1.9, 0.28);
       spawnImpactParticles(b.x, b.y, [HOLY_WHITE, HOLY_PALE, HOLY_GOLD, HOLY_DEEP], 30, 1.7, 90);
       triggerShake(8, 0.28);
@@ -753,14 +677,8 @@ class Angel extends Character {
     // killing the Angel in the 1.5s before it drops must not take it back. Same rule as the
     // Archer's sun and the Earth Mage's toppling pillar.
     this.updateMarks(dt);
-
-    // The transformation runs BEFORE super.update, because it has to keep running while hp is 0
-    // and it is the reason this character is still standing at all.
-    if (this.transformPhase) {
-      this.updateTransform(dt);
-      if (this.hitFlashTimer > 0) this.hitFlashTimer -= dt;
-      return;
-    }
+    // Everything above outlives her; the rite does not. See onDeath.
+    if (!this.alive) this.fadeRite(dt);
 
     super.update(dt, opponent);
     if (!this.alive) return;
@@ -770,6 +688,15 @@ class Angel extends Character {
       return;
     }
 
+    // Above the stun gate on purpose. The rite is not something the Angel is DOING — five spirits
+    // are walking a ring outside the arena on their own clock, and the beams come from them. Once
+    // it is called, knocking the caster senseless or pinning her feet to the floor does not reach
+    // them, any more than stunning the Archer stops a sun that has already been loosed.
+    //
+    // The ward's own countdown lives in here too, so that keeps running as well — a shield should
+    // not stop expiring just because its owner got hit.
+    this.updateUltimate(dt, opponent);
+
     if (opponent && opponent.alive) {
       const dx = opponent.x - this.x, dy = opponent.y - this.y;
       if (Math.hypot(dx, dy) > 0.01) {
@@ -778,12 +705,11 @@ class Angel extends Character {
       }
     }
 
-    this.wingPhase += dt * (this.shellUp ? 5.0 : 3.2);
+    this.wingPhase += dt * (this.ultActive ? 5.0 : 3.2);
     if (this.castTimer > 0) this.castTimer -= dt;
 
+    // Everything below IS the Angel's own action, and a stun stops all of it.
     if (this.stunTimer > 0) return;
-
-    this.updateSusanoo(dt, opponent);
 
     if (this.boltTimer > 0) this.boltTimer -= dt;
     if (this.boltTimer <= 0 && this.canAttack && opponent && opponent.alive) {
@@ -796,62 +722,102 @@ class Angel extends Character {
   onVictory() {
     if (this.celebrating) return;
     this.celebrating = true;
+    // main.js draws drawVictoryOverlay for anything flying this flag, above the HUD — see there.
+    this.celebratingVictory = true;
     this.victoryTimer = 0;
     this.victoryStartX = this.x;
     this.victoryStartY = this.y;
     this.vx = 0;
     this.vy = 0;
-    this.susanooPhase = null;
-    this.thrustPhase = null;
-    this.thrustTarget = null;
+    this.ultActive = false;
+    this.spirits.length = 0;
+    this.beams.length = 0;
     this.bolts.length = 0;
-    playSfx("demonWings", 0.9);
+    this.marks.length = 0;
+    // No pentagram in the victory. The ring belongs to the rite — it is the thing the spirits
+    // walk — and drawing it again over a won round made the celebration read as another cast.
+    // What is left is only her: she rises, and the light comes out of her.
+    //
+    // ringT is NOT forced to 0 here: winning mid-rite would then snap a fully-lit ring off the
+    // floor in a single frame. It is left where it is and walked down in updateVictory instead.
+    this.stopRiteSound();
+    // Held rather than fired and forgotten: the clip runs 7.5s but ROUND_END_GRACE is 3.0s, so
+    // without a handle it would still be playing several seconds into whatever came next.
+    this.victorySound = playSfx("angelVictory", 0.85, 0.02);
+  }
+
+  // 0 = nothing, 1 = the frame is pure white. Drives both the flood and how far the arena beneath
+  // it has been washed out.
+  get victoryFlood() {
+    const t = this.victoryTimer - ANGEL_VICTORY_HOLD - ANGEL_VICTORY_GATHER;
+    if (t <= 0) return 0;
+    const k = Math.min(1, t / ANGEL_VICTORY_FLOOD);
+    // Accelerating, NOT smoothstep. It has to seep out of her slowly at first and then run away
+    // with itself; a symmetric ease spends its fastest moment in the middle and its slowest at the
+    // very end, which is backwards for something engulfing a frame.
+    return k * k;
+  }
+
+  // 0..1 across the gathering beat — the star brightening before it lets go.
+  get victoryGather() {
+    const t = this.victoryTimer - ANGEL_VICTORY_HOLD;
+    if (t <= 0) return 0;
+    return Math.min(1, t / ANGEL_VICTORY_GATHER);
   }
 
   updateVictory(dt) {
     this.victoryTimer += dt;
+    // Down, never up. Normally already 0 and this does nothing; if the round was won part-way
+    // through a rite it takes the ring off the floor over ANGEL_RING_FADE rather than cutting it.
+    this.ringT = Math.max(0, this.ringT - dt / ANGEL_RING_FADE);
     const t = Math.min(1, this.victoryTimer / ANGEL_VICTORY_RISE);
-    // The white form ascends; the fallen one has nothing left to ascend with and stays planted,
-    // which is the whole point of what happened to it.
-    this.lift = this.fallen ? 0 : ANGEL_VICTORY_HEIGHT * angelEase(t);
-    this.wingPhase += dt * (this.fallen ? 2.2 : 5.0);
-    if (Math.random() < 0.5) {
-      spawnImpactParticles(this.x + (Math.random() - 0.5) * this.size * 2,
-                           this.y - this.lift - this.size * 0.2,
-                           this.palette, 2, 0.8, this.fallen ? 270 : 90);
+    this.lift = ANGEL_VICTORY_HEIGHT * angelEase(t);
+    this.wingPhase += dt * 5.0;
+
+    const g = this.victoryGather;
+    // Motes drawn UP out of the floor across the whole arena while it gathers — the light is being
+    // collected from everywhere, not just from her.
+    if (g > 0 && this.victoryFlood <= 0 && Math.random() < 0.55) {
+      spawnImpactParticles(ARENA.x + Math.random() * ARENA.w,
+                           ARENA.y + Math.random() * ARENA.h,
+                           [HOLY_WHITE, HOLY_PALE, HOLY_GOLD], 2, 0.9 + g, 270);
+    }
+    if (g >= 1 && this.victoryFlood > 0 && this.victoryFlood < 0.08) {
+      triggerShake(14, 0.5, true);   // sustained: the light breaking, not an impact
     }
   }
 
   // ---------------------------------------------------------------- HUD
   get ultimateRatio() {
-    if (this.transformPhase) return 1;
-    if (this.fallen) return null;             // nothing left to charge
-    // While it is up the bar shows what is LEFT of the shell, not a cooldown — that is the number
-    // that actually matters to the fight at that moment.
-    if (this.shellUp) return Math.max(0, this.shellHp / ANGEL_SUSANOO_HP);
-    if (this.susanooPhase) return 0;
-    return Math.max(0, Math.min(1, 1 - this.susanooTimer / ANGEL_SUSANOO_INTERVAL));
+    // While the rite runs the bar shows how far THROUGH it is — which of the five has fired —
+    // rather than a cooldown nobody is waiting on at that moment.
+    if (this.ultActive) return Math.max(0, Math.min(1, this.volley / ANGEL_PENTA_POINTS));
+    return Math.max(0, Math.min(1, 1 - this.ultTimer / ANGEL_ULT_INTERVAL));
   }
 
   get ultimateBarColor() {
-    return this.fallen ? FALLEN_EMBER : ANGEL_GOLD;
+    return ANGEL_GOLD;
   }
 
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     let note = null, color = ANGEL_GOLD;
-    if (this.transformPhase) { note = "墜落中"; color = FALLEN_EMBER; }
-    else if (this.fallen)    { note = "墮天 — 不再復活"; color = FALLEN_EMBER; }
-    else if (this.shellUp)   { note = `護體 ${Math.ceil(this.shellHp)}/${ANGEL_SUSANOO_HP}`; }
-    else if (this.susanooPhase === "fade") { note = "護體消散中"; }
+    if (this.ultActive) { note = L(`RITE — volley ${Math.max(1, this.volley)}/${ANGEL_PENTA_POINTS}, ${this.spirits.length} spirits`,
+                                        `五芒儀式 — 第 ${Math.max(1, this.volley)}/${ANGEL_PENTA_POINTS} 輪，${this.spirits.length} 靈體`); }
+    else if (this.shieldPoints > 0) {
+      note = L(`WARD ${Math.ceil(this.shieldHp)}  ${this.shieldTimer.toFixed(1)}s`,
+               `護盾 ${Math.ceil(this.shieldHp)}  ${this.shieldTimer.toFixed(1)}s`);
+      color = HOLY_WHITE;
+    }
     let cy = ny;
     if (note) { this.drawHudNote(ctx, x, cy, note, color); cy += 18; }
 
     // The count is the whole read on this character's normal attack, so it gets its own line
     const m = this.marks.find((r) => r.body && r.body.alive);
     if (m) {
-      const txt = m.sword ? "審判 — 光劍落下"
-                          : `印記 ${m.orbs.length}/${ANGEL_MARK_MAX}`;
+      const txt = m.sword ? L("JUDGEMENT — blade falling", "審判 — 光劍落下")
+                          : L(`MARKS ${m.orbs.length}/${ANGEL_MARK_MAX}`,
+                              `印記 ${m.orbs.length}/${ANGEL_MARK_MAX}`);
       this.drawHudNote(ctx, x, cy, txt, m.sword ? "#fff3c4" : ANGEL_GOLD);
       cy += 18;
     }
@@ -862,9 +828,12 @@ class Angel extends Character {
   // The contact shadow lives here rather than in drawBody, because the body is drawn lifted and
   // the shadow must not travel with it — the gap between them IS the height cue.
   drawGroundEffects(ctx) {
-    if (this.halo) this.drawBrokenHalo(ctx);
+    if (this.ringT > 0) this.drawPentagram(ctx);
 
     if (!this.alive && this.deathFadeTimer <= 0) return;
+    // No contact shadow once she is the light source. A dark ellipse under someone the glare is
+    // pouring OUT of reads as a hole in the floor.
+    if (this.celebratingVictory && this.victoryGather > 0) return;
     const r = this.size / 2;
     const h = Math.max(0, this.lift);
     const k = 1 - Math.min(1, h / (ANGEL_VICTORY_HEIGHT * 0.9));  // higher => smaller, fainter
@@ -904,6 +873,8 @@ class Angel extends Character {
 
   // Bolts, gathering orbs and blades are all airborne and pass over everything.
   drawOverlayEffects(ctx) {
+    for (const b of this.beams) this.drawBeam(ctx, b);
+    if (this.ultActive) for (const sp of this.spirits) this.drawSpirit(ctx, sp);
     for (const b of this.bolts) this.drawBolt(ctx, b);
     for (const m of this.marks) if (m.sword) this.drawMark(ctx, m);
   }
@@ -937,9 +908,6 @@ class Angel extends Character {
     }
 
     this.drawSword(ctx, b, p);
-    // (C) While the guardian stands, the judgement is not floating on its own — the shell reaches
-    // over and drives it down by hand. Drawn after the blade so the arm laps over the grip.
-    if (this.shellUp) this.drawSusanooGrip(ctx, b, p);
   }
 
   // Same ramp as the blade they turn into — if the orbs were the form's own colour the light
@@ -1188,49 +1156,350 @@ class Angel extends Character {
     const h = Math.max(0, this.lift);
     ctx.save();
     if (h > 0) ctx.translate(0, -h);
-    // Behind the body, in the same depth slot: it is worn, so it never sorts apart from its wearer.
-    if (this.susanooPhase) this.drawSusanoo(ctx);
     super.draw(ctx);
     ctx.restore();
   }
 
-  // The guardian: a warrior in light, standing behind the Angel with a blade in its hand.
+  // The deluge. Drawn over the arena, the fighters and the HUD alike (see main.js) — by the end
+  // there is nothing left to see under it anyway.
   //
-  // The previous pass read as an insect and it is worth writing down why, because every one of
-  // these choices is the fix for one of those reasons:
-  //
-  //  - It was built from thin curved strokes with horizontal bands across the torso. Curved ribs
-  //    plus gold plus stripes is a wasp. It is now built from FILLED, angular plates.
-  //  - Two thin horns stood straight up off a small round head — antennae. It is now a single
-  //    swept crest over a proper faceplate with slit eyes.
-  //  - The arms were thin rods off a narrow body. There are broad pauldrons now, and the mass
-  //    sits in the shoulders the way armour does.
-  //
-  // Still translucent throughout: the Angel has to stay legible inside it, and a solid figure
-  // would simply hide the character it is supposed to be protecting.
-  drawSusanoo(ctx) {
-    const f = this.shellForm;
-    if (f <= 0.01) return;
-    const R = this.shellRadius * (0.85 + 0.15 * f);
+  // Three layers, in order: a wash that drains the colour out of everything beneath, the star
+  // itself burning at full strength, and the flood proper — white poured out of the ring in a
+  // front that overtakes the frame. The Angel is left as a silhouette because the glare is behind
+  // and around her, not in front.
+  drawVictoryOverlay(ctx) {
+    const cx = ARENA.x + ARENA.w / 2, cy = ARENA.y + ARENA.h / 2;
+    const g = this.victoryGather;
+    const f = this.victoryFlood;
     const t = performance.now() / 1000;
-    const wear = 1 - Math.max(0, this.shellHp) / ANGEL_SUSANOO_HP;   // 0 fresh .. 1 about to break
-    const sway = Math.sin(t * 1.4 + this.bodySeed) * 0.025;
-    // Faces whoever it is about to run through; otherwise faces the way the Angel does
-    const face = Math.cos(this.thrustPhase ? this.thrustAim : this.facingAngle) >= 0 ? 1 : -1;
 
     ctx.save();
-    ctx.translate(this.x, this.y - this.lift);
-    ctx.rotate(sway);
 
-    // ---- the aura it stands in
-    ctx.globalAlpha = f;
-    const aura = ctx.createRadialGradient(0, -R * 0.2, R * 0.25, 0, -R * 0.2, R * 1.25);
-    aura.addColorStop(0, "rgba(255,246,214,0.26)");
-    aura.addColorStop(0.55, "rgba(255,217,104,0.13)");
+    // ---- 1. the arena dims and desaturates as the light is drawn out of it
+    if (g > 0 && f < 1) {
+      ctx.globalAlpha = 0.5 * g * (1 - f);
+      ctx.fillStyle = "#05060c";
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    }
+
+    // ---- 3. the flood, pouring out of HER rather than out of the ring. She is the source, so
+    // the gradient is centred on her body and starts no wider than she is.
+    //
+    // It was centred on the arena before, which made her a dark shape standing in front of a light
+    // that was coming from somewhere else — the thing that read as a shadow. Light that comes out
+    // of someone has to have them as its brightest point.
+    const sx = this.x, sy = this.y - this.lift;
+
+    // A halo on her from the moment the gathering starts, so the source is already glowing before
+    // any of it spills — the flood is that glow growing, not a separate effect switching on.
+    if (g > 0) {
+      const r0 = this.size * (0.55 + 1.5 * g);
+      ctx.globalAlpha = 0.35 + 0.65 * g;
+      const hg = ctx.createRadialGradient(sx, sy, 0, sx, sy, r0);
+      hg.addColorStop(0, "rgba(255,255,255,0.95)");
+      hg.addColorStop(0.35, "rgba(255,248,226,0.6)");
+      hg.addColorStop(1, "rgba(255,217,104,0)");
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(sx, sy, r0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (f > 0) {
+      // From her own size out to past the far corner of the frame
+      const maxR = Math.hypot(WIDTH, HEIGHT) * 1.15;
+      const R = this.size * 1.1 + (maxR - this.size * 1.1) * f;
+      // A soft shoulder rather than a hard front: this is light welling up, not a shockwave
+      const fg = ctx.createRadialGradient(sx, sy, 0, sx, sy, Math.max(1, R));
+      fg.addColorStop(0, "rgba(255,255,255,1)");
+      fg.addColorStop(0.55, "rgba(255,253,246,0.95)");
+      fg.addColorStop(0.82, "rgba(255,240,196,0.6)");
+      fg.addColorStop(1, "rgba(255,217,104,0)");
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(sx, sy, R, 0, Math.PI * 2);
+      ctx.fill();
+
+      // and only at the very end does the last of the frame go
+      if (f > 0.86) {
+        ctx.globalAlpha = (f - 0.86) / 0.14;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      }
+    }
+    ctx.restore();
+  }
+
+  // The ring the rite is inscribed on. It lives in the ground pass, under every fighter — it is
+  // marked on the floor, not floating over it.
+  //
+  // Built so the figure COMPLETES itself across the rite rather than being fully there from the
+  // start: a chord is a faint guide line until a spirit has fired down it, then it stays lit. By
+  // the fifth volley all five are burning and the star is finished.
+  drawPentagram(ctx) {
+    const k = angelEase(this.ringT);
+    if (k <= 0.01) return;
+    const cx = ARENA.x + ARENA.w / 2, cy = ARENA.y + ARENA.h / 2;
+    const t = performance.now() / 1000;
+    const v = [];
+    for (let i = 0; i < ANGEL_PENTA_POINTS; i++) v.push(this.pentaVertex(i));
+
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    // ---- two rings, counter-rotating tick marks between them
+    ctx.globalAlpha = 0.3 * k;
+    ctx.strokeStyle = HOLY_GOLD;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, ANGEL_PENTA_RX, ANGEL_PENTA_RY, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.16 * k;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, ANGEL_PENTA_RX * 0.945, ANGEL_PENTA_RY * 0.945, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.22 * k;
+    ctx.strokeStyle = HOLY_LIGHT;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 40; i++) {
+      const a = t * 0.18 + (i / 40) * Math.PI * 2;
+      const c = Math.cos(a), sn = Math.sin(a);
+      const long = i % 8 === 0;
+      const r0 = long ? 0.9 : 0.955, r1 = 1.0;
+      ctx.beginPath();
+      ctx.moveTo(cx + c * ANGEL_PENTA_RX * r0, cy + sn * ANGEL_PENTA_RY * r0);
+      ctx.lineTo(cx + c * ANGEL_PENTA_RX * r1, cy + sn * ANGEL_PENTA_RY * r1);
+      ctx.stroke();
+    }
+
+    // ---- the star. Unlit chords are thin guide lines; lit ones burn, and glow along their length.
+    for (let i = 0; i < ANGEL_PENTA_POINTS; i++) {
+      const a = v[i], b = v[(i + 2) % ANGEL_PENTA_POINTS];
+      const fired = this.firedChords.includes(i);
+      if (!fired) {
+        ctx.globalAlpha = 0.12 * k;
+        ctx.strokeStyle = HOLY_GOLD;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([10, 14]);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        continue;
+      }
+      // a soft wash under a bright core, both fading toward the two ends
+      const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+      g.addColorStop(0, "rgba(255,217,104,0)");
+      g.addColorStop(0.5, HOLY_GOLD);
+      g.addColorStop(1, "rgba(255,217,104,0)");
+      ctx.strokeStyle = g;
+      ctx.globalAlpha = 0.3 * k;
+      ctx.lineWidth = 11;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.globalAlpha = 0.55 * k;
+      ctx.strokeStyle = HOLY_PALE;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+
+    // ---- vertex sigils: a ring, a lit core once fired from, and four little rays
+    for (let i = 0; i < ANGEL_PENTA_POINTS; i++) {
+      const lit = this.firedChords.includes(i);
+      ctx.save();
+      ctx.translate(v[i].x, v[i].y);
+      ctx.globalAlpha = (lit ? 0.75 : 0.4) * k;
+      ctx.strokeStyle = lit ? HOLY_PALE : HOLY_LIGHT;
+      ctx.lineWidth = lit ? 3 : 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 15, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.rotate(t * 0.5 * (i % 2 ? 1 : -1));
+      ctx.lineWidth = 2;
+      for (let r = 0; r < 4; r++) {
+        ctx.rotate(Math.PI / 2);
+        ctx.beginPath();
+        ctx.moveTo(17, 0);
+        ctx.lineTo(24, 0);
+        ctx.stroke();
+      }
+      if (lit) {
+        ctx.globalAlpha = 0.8 * k;
+        ctx.fillStyle = HOLY_WHITE;
+        ctx.beginPath();
+        ctx.arc(0, 0, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // ---- the completed figure blooms once, on the fifth volley
+    if (this.starFlash > 0) {
+      const f = this.starFlash;
+      ctx.globalAlpha = 0.5 * f * f;
+      ctx.strokeStyle = HOLY_WHITE;
+      ctx.lineWidth = 3 + 26 * f;
+      ctx.beginPath();
+      for (let i = 0; i < ANGEL_PENTA_POINTS; i++) {
+        const a = v[i], b = v[(i + 2) % ANGEL_PENTA_POINTS];
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // A beam, for as long as it is visible. The damage was already resolved on the frame it fired
+  // (see fireBeam) — this is purely the picture of it.
+  //
+  // Three things happen over its short life: a leading edge races the length of the chord in the
+  // first instant, the body of it swells and then thins, and both ends keep a flare. Drawing it as
+  // one flat bar reads as a painted stripe rather than as something that was fired.
+  drawBeam(ctx, b) {
+    const p = Math.max(0, Math.min(1, b.t / b.life));
+    const k = 1 - p;                         // overall fade
+    const dx = b.bx - b.ax, dy = b.by - b.ay;
+    const len = Math.hypot(dx, dy) || 1;
+    const ang = Math.atan2(dy, dx);
+    const w = ANGEL_BEAM_WIDTH;
+    // Swells fast, then thins out as it fades
+    const body = p < 0.16 ? p / 0.16 : 0.55 + 0.45 * k;
+
+    ctx.save();
+    ctx.translate(b.ax, b.ay);
+    ctx.rotate(ang);
+
+    // wide soft wash
+    const g = ctx.createLinearGradient(0, -w * 2.1, 0, w * 2.1);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(0.5, `rgba(255,233,168,${0.42 * k})`);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, -w * 2.1, len, w * 4.2);
+
+    // the body, tapering to nothing at both ends so it never shows a hard cap
+    const along = ctx.createLinearGradient(0, 0, len, 0);
+    along.addColorStop(0, "rgba(255,217,104,0)");
+    along.addColorStop(0.12, HOLY_GOLD);
+    along.addColorStop(0.88, HOLY_GOLD);
+    along.addColorStop(1, "rgba(255,217,104,0)");
+    ctx.globalAlpha = 0.9 * k;
+    ctx.fillStyle = along;
+    ctx.fillRect(0, -w * 0.55 * body, len, w * 1.1 * body);
+
+    // white core
+    const core = ctx.createLinearGradient(0, 0, len, 0);
+    core.addColorStop(0, "rgba(255,255,255,0)");
+    core.addColorStop(0.1, HOLY_WHITE);
+    core.addColorStop(0.9, HOLY_WHITE);
+    core.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.globalAlpha = k;
+    ctx.fillStyle = core;
+    ctx.fillRect(0, -w * 0.17 * body, len, w * 0.34 * body);
+
+    // leading edge, only in the first instant — the sense of it being fired rather than appearing
+    if (p < 0.28) {
+      const e = p / 0.28;
+      const ex = len * angelEase(e);
+      ctx.globalAlpha = (1 - e) * 0.9;
+      const eg = ctx.createRadialGradient(ex, 0, 0, ex, 0, w * 2.2);
+      eg.addColorStop(0, HOLY_WHITE);
+      eg.addColorStop(0.4, `rgba(255,246,214,0.5)`);
+      eg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = eg;
+      ctx.beginPath();
+      ctx.arc(ex, 0, w * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // a flare at each end, so the chord visibly starts and finishes somewhere
+    for (const [fx, fy] of [[b.ax, b.ay], [b.bx, b.by]]) {
+      ctx.save();
+      ctx.globalAlpha = 0.75 * k;
+      const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, w * 1.9);
+      fg.addColorStop(0, HOLY_WHITE);
+      fg.addColorStop(0.35, `rgba(255,233,168,0.55)`);
+      fg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(fx, fy, w * 1.9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // The spirit currently walking the ring: the same guardian figure as before, standing on the
+  // pentagram rather than wrapped around the Angel. Built from filled angular plates — an earlier
+  // version drawn from thin curved strokes with horizontal banding read as an insect.
+  drawSpirit(ctx, sp) {
+    const p = this.spiritPoint(sp);
+    if (!p) return;
+    const R = this.size * 0.5 * ANGEL_SPIRIT_SCALE;
+    const t = performance.now() / 1000;
+    // Braced and brightening while it charges, so the beam is announced before it lands
+    const charging = this.ritePhase === "charge";
+    const heat = charging ? 0.5 + 0.5 * Math.sin(t * 22) : 1;
+    // Faces along the chord it is about to fire
+    const ln = this.beamLine(this.spiritVertex(sp));
+    const face = Math.cos(Math.atan2(ln.by - ln.ay, ln.bx - ln.ax)) >= 0 ? 1 : -1;
+    // Each one bobs on its own phase, so five of them on the ring never move as a block
+    const seed = this.bodySeed + this.spirits.indexOf(sp) * 1.7;
+
+    // A wake trailing back along the ring while it walks — three ghosts of itself, thinning out,
+    // so a spirit crossing the arena's edge reads as travelling rather than sliding.
+    if (this.ritePhase === "walk") {
+      const k = angelEase(1 - this.phaseTimer / ANGEL_SPIRIT_WALK);
+      for (let i = 1; i <= 3; i++) {
+        const q = this.pentaWalk(sp.at, Math.max(0, k - i * 0.055));
+        ctx.save();
+        ctx.globalAlpha = 0.16 / i;
+        const wg = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, R * 0.8);
+        wg.addColorStop(0, HOLY_GOLD);
+        wg.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = wg;
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, R * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // A pool of light under it, so it is standing ON the ring rather than floating over it
+    ctx.save();
+    ctx.globalAlpha = 0.3 * heat;
+    const pool = ctx.createRadialGradient(p.x, p.y + R * 0.75, 0, p.x, p.y + R * 0.75, R * 0.95);
+    pool.addColorStop(0, HOLY_LIGHT);
+    pool.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = pool;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + R * 0.75, R * 0.95, R * 0.34, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(Math.sin(t * 1.6 + seed) * 0.03);
+
+    ctx.globalAlpha = 0.85;
+    const aura = ctx.createRadialGradient(0, -R * 0.2, R * 0.2, 0, -R * 0.2, R * 1.3);
+    aura.addColorStop(0, `rgba(255,246,214,${0.3 * heat})`);
+    aura.addColorStop(0.55, `rgba(255,217,104,${0.14 * heat})`);
     aura.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = aura;
     ctx.beginPath();
-    ctx.arc(0, -R * 0.2, R * 1.25, 0, Math.PI * 2);
+    ctx.arc(0, -R * 0.2, R * 1.3, 0, Math.PI * 2);
     ctx.fill();
 
     const plate = (alpha) => {
@@ -1243,8 +1512,8 @@ class Angel extends Character {
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
 
-    // ---- cuirass: one broad angular plate, wide at the shoulders, tapering to the waist
-    ctx.globalAlpha = 0.42 * f;
+    // cuirass
+    ctx.globalAlpha = 0.55;
     ctx.fillStyle = plate(1);
     ctx.beginPath();
     ctx.moveTo(-R * 0.94, -R * 0.62);
@@ -1256,31 +1525,21 @@ class Angel extends Character {
     ctx.lineTo(-R * 0.6, R * 0.66);
     ctx.closePath();
     ctx.fill();
-    ctx.globalAlpha = 0.85 * f;
+    ctx.globalAlpha = 0.9;
     ctx.strokeStyle = HOLY_PALE;
     ctx.lineWidth = R * 0.045;
     ctx.stroke();
 
-    // a single vertical ridge down the centre — vertical, not the horizontal banding that made
-    // the old one look striped
-    ctx.globalAlpha = 0.5 * f;
+    // central ridge, vertical — the horizontal banding is what made the old one look striped
+    ctx.globalAlpha = 0.55;
     ctx.lineWidth = R * 0.05;
     ctx.strokeStyle = HOLY_LIGHT;
     ctx.beginPath();
     ctx.moveTo(0, -R * 0.8);
     ctx.lineTo(0, R * 0.72);
     ctx.stroke();
-    // two angled chest facets, catching light off the ridge
-    for (const sgn of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(sgn * R * 0.1, -R * 0.72);
-      ctx.lineTo(sgn * R * 0.66, -R * 0.4);
-      ctx.lineTo(sgn * R * 0.46, R * 0.3);
-      ctx.stroke();
-    }
 
-    // ---- pauldrons: the mass sits here, which is what makes it read as armour
-    ctx.globalAlpha = 0.5 * f;
+    // pauldrons
     for (const sgn of [-1, 1]) {
       ctx.fillStyle = plate(1);
       ctx.beginPath();
@@ -1290,16 +1549,26 @@ class Angel extends Character {
       ctx.lineTo(sgn * R * 0.82, -R * 0.3);
       ctx.closePath();
       ctx.fill();
-      ctx.globalAlpha = 0.8 * f;
-      ctx.strokeStyle = HOLY_PALE;
-      ctx.lineWidth = R * 0.04;
-      ctx.stroke();
-      ctx.globalAlpha = 0.5 * f;
     }
 
-    // ---- helm: a faceplate with slit eyes under a single swept crest
+    // arms, both braced forward while it channels
+    ctx.strokeStyle = HOLY_GOLD;
+    ctx.lineWidth = R * 0.19;
+    for (const sgn of [-1, 1]) {
+      ctx.save();
+      ctx.translate(sgn * R * 0.62, -R * 0.46);
+      ctx.scale(sgn, 1);
+      ctx.rotate(charging ? -0.15 : 0.3);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(R * 0.46, R * 0.52);
+      ctx.lineTo(R * 0.34, R * 1.08);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // helm with a swept crest and slit eyes
     ctx.fillStyle = plate(1);
-    ctx.globalAlpha = 0.5 * f;
     ctx.beginPath();
     ctx.moveTo(-R * 0.42, -R * 0.9);
     ctx.lineTo(-R * 0.46, -R * 1.36);
@@ -1308,12 +1577,11 @@ class Angel extends Character {
     ctx.lineTo(R * 0.42, -R * 0.9);
     ctx.closePath();
     ctx.fill();
-    ctx.globalAlpha = 0.85 * f;
+    ctx.globalAlpha = 0.9;
     ctx.strokeStyle = HOLY_PALE;
     ctx.lineWidth = R * 0.04;
     ctx.stroke();
-    // crest, swept back over the helm
-    ctx.globalAlpha = 0.6 * f;
+    ctx.globalAlpha = 0.65;
     ctx.fillStyle = plate(1);
     ctx.beginPath();
     ctx.moveTo(-face * R * 0.06, -R * 1.5);
@@ -1321,8 +1589,7 @@ class Angel extends Character {
     ctx.quadraticCurveTo(-face * R * 0.52, -R * 1.68, -face * R * 0.16, -R * 1.4);
     ctx.closePath();
     ctx.fill();
-    // slit eyes
-    ctx.globalAlpha = 0.95 * f;
+    ctx.globalAlpha = heat;
     ctx.fillStyle = HOLY_WHITE;
     for (const sgn of [-1, 1]) {
       ctx.save();
@@ -1331,217 +1598,37 @@ class Angel extends Character {
       ctx.fillRect(-R * 0.11, -R * 0.028, R * 0.22, R * 0.056);
       ctx.restore();
     }
-    ctx.globalAlpha = 0.5 * f;
-
-    // ---- arms. The blade arm reaches out along the thrust; the other is braced across the body.
-    const pose = this.bladePose();
-    const armAim = pose.aim;
-    // shoulder of the sword arm, on whichever side it is reaching
-    const sx = Math.cos(armAim) * R * 0.72, sy = Math.sin(armAim) * R * 0.72 - R * 0.5;
-    const hx = pose.x - this.x, hy = pose.y - (this.y - this.lift);
-    const ex = (sx + hx) * 0.5 + Math.cos(armAim + Math.PI / 2) * R * 0.28;
-    const ey = (sy + hy) * 0.5 + Math.sin(armAim + Math.PI / 2) * R * 0.28;
-
-    // the off arm, braced
-    ctx.strokeStyle = HOLY_GOLD;
-    ctx.lineWidth = R * 0.2;
-    ctx.beginPath();
-    ctx.moveTo(-face * R * 0.86, -R * 0.5);
-    ctx.lineTo(-face * R * 1.0, R * 0.16);
-    ctx.lineTo(-face * R * 0.5, R * 0.5);
-    ctx.stroke();
-
-    // the sword arm
-    ctx.lineWidth = R * 0.22;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.lineTo(hx, hy);
-    ctx.stroke();
-    ctx.globalAlpha = 0.55 * f;
-    ctx.strokeStyle = HOLY_PALE;
-    ctx.lineWidth = R * 0.08;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.lineTo(hx, hy);
-    ctx.stroke();
-    // the fist closed on the grip
-    ctx.globalAlpha = 0.6 * f;
-    ctx.fillStyle = HOLY_LIGHT;
-    ctx.beginPath();
-    ctx.arc(hx, hy, R * 0.19, 0, Math.PI * 2);
-    ctx.fill();
-
-    // ---- fractures, revealed in the order they were fixed at summon time
-    if (wear > 0) {
-      ctx.globalAlpha = 0.8 * f;
-      ctx.strokeStyle = HOLY_WHITE;
-      ctx.lineWidth = R * 0.028;
-      for (const cr of this.shellCracks) {
-        if (cr.at > wear) continue;
-        const x0 = Math.cos(cr.a) * R * cr.r0, y0 = Math.sin(cr.a) * R * cr.r0 - R * 0.2;
-        const x1 = Math.cos(cr.a + cr.bend) * R * (cr.r0 + cr.len);
-        const y1 = Math.sin(cr.a + cr.bend) * R * (cr.r0 + cr.len) - R * 0.2;
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.quadraticCurveTo((x0 + x1) * 0.5 + cr.bend * R * 0.2, (y0 + y1) * 0.5, x1, y1);
-        ctx.stroke();
-      }
-    }
     ctx.restore();
 
-    // ---- the blade it is holding, in world space so the drawing and the hit test cannot drift
-    this.drawGuardianBlade(ctx, pose, f);
-  }
-
-  // The guardian's own sword: the same holy ramp as the judgement blade, but long and narrow —
-  // a thrusting weapon rather than something to bring down on a head.
-  drawGuardianBlade(ctx, p, f) {
-    const L = p.len, W = p.w;
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.aim);
-    ctx.globalAlpha = 0.9 * f;
-    ctx.shadowColor = HOLY_GOLD;
-    ctx.shadowBlur = W * 3.5;
-
-    // guard
-    ctx.fillStyle = HOLY_GOLD;
-    ctx.beginPath();
-    ctx.moveTo(-W * 0.6, -W * 2.1);
-    ctx.lineTo(W * 0.5, -W * 1.3);
-    ctx.lineTo(W * 0.5, W * 1.3);
-    ctx.lineTo(-W * 0.6, W * 2.1);
-    ctx.closePath();
-    ctx.fill();
-
-    // blade, running out along +x to a point
-    const g = ctx.createLinearGradient(0, -W, 0, W);
-    g.addColorStop(0, HOLY_DEEP);
-    g.addColorStop(0.42, HOLY_WHITE);
-    g.addColorStop(0.7, HOLY_GOLD);
-    g.addColorStop(1, HOLY_DEEP);
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(0, -W);
-    ctx.lineTo(L * 0.72, -W * 0.82);
-    ctx.lineTo(L, 0);
-    ctx.lineTo(L * 0.72, W * 0.82);
-    ctx.lineTo(0, W);
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // fuller down the centre, and a lit edge
-    ctx.fillStyle = HOLY_GOLD;
-    ctx.globalAlpha = 0.7 * f;
-    ctx.fillRect(W * 0.4, -W * 0.22, L * 0.62, W * 0.44);
-    ctx.globalAlpha = 0.9 * f;
-    ctx.strokeStyle = HOLY_WHITE;
-    ctx.lineWidth = W * 0.2;
-    ctx.beginPath();
-    ctx.moveTo(0, -W * 0.86);
-    ctx.lineTo(L * 0.72, -W * 0.7);
-    ctx.lineTo(L * 0.98, 0);
-    ctx.stroke();
-
-    // pommel behind the hand
-    ctx.fillStyle = HOLY_PALE;
-    ctx.beginPath();
-    ctx.arc(-W * 1.5, 0, W * 0.55, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // (C) The guardian's arm, reaching from the shell's shoulder to the hilt of a judgement blade
-  // that is currently hanging. Purely a drawing — the blade's timing, damage and tracking are
-  // unchanged, and it still falls exactly the same way if the shell is not up.
-  //
-  // The point is that the two halves of this character stop looking like two unrelated effects:
-  // the light the Angel gathers is handed to the thing standing behind it, and THAT is what
-  // brings it down.
-  drawSusanooGrip(ctx, b, p) {
-    const f = this.shellForm;
-    if (f <= 0.01) return;
-    const R = this.shellRadius;
-    const L = b.size * ANGEL_SWORD_LEN;
-
-    // shoulder on whichever side the target is, so the arm never reaches across its own chest
-    const side = b.x >= this.x ? 1 : -1;
-    const sx = this.x + side * R * 0.78;
-    const sy = this.y - this.lift - R * 0.5;
-    // the grip sits a little above the guard
-    const hx = b.x;
-    const hy = b.y - p.lift - L * 0.2;
-
-    // Elbow pushed outward and up, so the arm reads as reaching over rather than as a straight rod
-    const mx = sx + (hx - sx) * 0.45 + side * R * 0.34;
-    const my = sy + (hy - sy) * 0.45 - R * 0.3;
-
-    ctx.save();
-    ctx.globalAlpha = 0.55 * f;
-    ctx.lineCap = "round";
-    ctx.strokeStyle = HOLY_GOLD;
-    ctx.lineWidth = R * 0.17;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.quadraticCurveTo(mx, my, hx, hy);
-    ctx.stroke();
-    // a lit core down the middle of the limb
-    ctx.globalAlpha = 0.5 * f;
-    ctx.strokeStyle = HOLY_PALE;
-    ctx.lineWidth = R * 0.07;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.quadraticCurveTo(mx, my, hx, hy);
-    ctx.stroke();
-    // the fist closed around the grip
-    ctx.globalAlpha = 0.62 * f;
-    ctx.fillStyle = HOLY_LIGHT;
-    ctx.beginPath();
-    ctx.arc(hx, hy, R * 0.17, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // The broken halo, lying where it came off. Stays for the rest of the round — the arena should
-  // carry evidence of what happened in it, the same way the Earth Mage's pillars do.
-  drawBrokenHalo(ctx) {
-    const h = this.halo;
-    const r = this.size * 0.42;
-    ctx.save();
-    ctx.translate(h.x, h.y);
-    ctx.globalAlpha = 0.75;
-    for (const sh of h.shards) {
+    // The line it is about to fire down. Grows brighter and wider across the brace rather than
+    // just blinking, so the 0.3s warning actually counts down in front of you.
+    if (charging) {
+      const c = 1 - this.phaseTimer / ANGEL_SPIRIT_CHARGE;   // 0 -> 1 across the brace
       ctx.save();
-      ctx.rotate(sh.rot);
-      ctx.strokeStyle = ANGEL_GOLD_DEEP;
-      ctx.lineWidth = this.size * 0.075;
-      ctx.lineCap = "round";
+      ctx.globalAlpha = 0.1 + 0.3 * c;
+      ctx.strokeStyle = HOLY_WHITE;
+      ctx.lineWidth = 2 + 5 * c;
+      ctx.setLineDash([16, 13]);
+      ctx.lineDashOffset = -t * 90;
       ctx.beginPath();
-      // Flattened hard: it is lying on the floor now, not hovering over a head
-      ctx.ellipse(sh.off * 0.4, 0, r, r * 0.3, 0, sh.a0, sh.a0 + sh.span);
-      ctx.stroke();
-      ctx.strokeStyle = "rgba(255,217,104,0.5)";
-      ctx.lineWidth = this.size * 0.03;
+      ctx.moveTo(ln.ax, ln.ay);
+      ctx.lineTo(ln.bx, ln.by);
       ctx.stroke();
       ctx.restore();
     }
-    ctx.restore();
   }
 
   // A bolt in flight: a soft halo with a four-pointed star spinning inside it, so it reads as
   // light rather than as a pellet at any speed.
   drawBolt(ctx, b) {
     const R = ANGEL_BOLT_RADIUS;
-    const core = b.fallen ? "#ffcfc4" : "#ffffff";
-    const glow = b.fallen ? FALLEN_EMBER : ANGEL_GOLD;
+    const core = "#ffffff";
+    const glow = ANGEL_GOLD;
     ctx.save();
     ctx.translate(b.x, b.y);
 
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 2.1);
-    g.addColorStop(0, b.fallen ? "rgba(255,74,61,0.55)" : "rgba(255,233,168,0.55)");
+    g.addColorStop(0, "rgba(255,233,168,0.55)");
     g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = g;
     ctx.beginPath();
@@ -1573,26 +1660,13 @@ class Angel extends Character {
     const t = performance.now() / 1000;
     const breathe = 1 + Math.sin(t * 1.3 + this.bodySeed) * 0.02;
 
-    // Collapsed on the floor for the two phases before it stands again
-    const down = this.transformPhase === "fall" || this.transformPhase === "shatter";
-    const rising = this.transformPhase === "rise"
-      ? 1 - Math.max(0, this.transformTimer) / ANGEL_RISE_TIME
-      : 1;
-
     ctx.save();
     ctx.translate(this.x, this.y);
-    if (down) {
-      // Face down, slumped — the silhouette alone should say it is not standing
-      ctx.rotate(Math.PI * 0.42);
-      ctx.scale(1, 0.82);
-    } else if (this.transformPhase === "rise") {
-      ctx.rotate(Math.PI * 0.42 * (1 - angelEase(rising)));
-    }
     ctx.scale(breathe, breathe);
 
-    this.drawWings(ctx, r, t, down ? 0.25 : (this.transformPhase === "rise" ? angelEase(rising) : 1));
+    this.drawWings(ctx, r, t, 1);
     this.drawRobe(ctx, r);
-    if (!this.fallen && !down) this.drawHalo(ctx, r, t);
+    this.drawHalo(ctx, r, t);
     ctx.restore();
   }
 
@@ -1610,11 +1684,10 @@ class Angel extends Character {
   // the only place it should.
   drawWings(ctx, r, t, spread) {
     if (spread <= 0.01) return;
-    const fallen = this.fallen;
-    const flap = Math.sin(this.wingPhase) * (this.shellUp ? 0.22 : 0.12);
-    const light = fallen ? FALLEN_WING : ANGEL_WING;
-    const shade = fallen ? FALLEN_WING_SHADE : ANGEL_WING_SHADE;
-    const edge  = fallen ? "rgba(0,0,0,0.55)" : "rgba(126,146,178,0.42)";
+    const flap = Math.sin(this.wingPhase) * (this.ultActive ? 0.22 : 0.12);
+    const light = ANGEL_WING;
+    const shade = ANGEL_WING_SHADE;
+    const edge  = "rgba(126,146,178,0.42)";
     const reach = r * 2.25 * spread;
 
     for (const side of [-1, 1]) {
@@ -1638,7 +1711,7 @@ class Angel extends Character {
 
       // Feathers: wide, overlapping, drawn from the top of the fan downward so each one laps over
       // the one behind it the way a real primary does.
-      const n = fallen ? 7 : 8;
+      const n = 8;
       for (let i = 0; i < n; i++) {
         const f = i / (n - 1);
         const a = -0.95 + f * 1.28;                       // -54deg .. +19deg
@@ -1650,25 +1723,16 @@ class Angel extends Character {
         const g = ctx.createLinearGradient(0, 0, len, 0);
         g.addColorStop(0, shade);
         g.addColorStop(0.45, light);
-        g.addColorStop(1, fallen ? FALLEN_WING_SHADE : "#ffffff");
+        g.addColorStop(1, "#ffffff");
         ctx.fillStyle = g;
         ctx.strokeStyle = edge;
         ctx.lineWidth = r * 0.025;
         ctx.beginPath();
         ctx.moveTo(0, r * 0.05);
-        if (fallen && i % 3 === 1) {
-          // Torn: cut short with a bite out of the trailing edge. Same skeleton as the white
-          // wing, so the two forms read as the same wings after something happened to them.
-          ctx.quadraticCurveTo(len * 0.45, -w * 0.9, len * 0.66, -w * 0.1);
-          ctx.lineTo(len * 0.5, w * 0.3);
-          ctx.lineTo(len * 0.68, w * 0.55);
-          ctx.quadraticCurveTo(len * 0.34, w * 0.7, 0, r * 0.05);
-        } else {
-          // Rounded tip, not a spike — the point is what made the last pass read as broken glass
-          ctx.quadraticCurveTo(len * 0.5, -w, len * 0.94, -w * 0.22);
-          ctx.quadraticCurveTo(len * 1.02, 0, len * 0.9, w * 0.2);
-          ctx.quadraticCurveTo(len * 0.45, w * 0.72, 0, r * 0.05);
-        }
+        // Rounded tip, not a spike — a pointed one made the wing read as broken glass
+        ctx.quadraticCurveTo(len * 0.5, -w, len * 0.94, -w * 0.22);
+        ctx.quadraticCurveTo(len * 1.02, 0, len * 0.9, w * 0.2);
+        ctx.quadraticCurveTo(len * 0.45, w * 0.72, 0, r * 0.05);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
@@ -1679,11 +1743,10 @@ class Angel extends Character {
   }
 
   drawRobe(ctx, r) {
-    const fallen = this.fallen;
-    const c0 = fallen ? FALLEN_ROBE_LIGHT : ANGEL_ROBE_LIGHT;
-    const c1 = fallen ? FALLEN_ROBE_MID   : ANGEL_ROBE_MID;
-    const c2 = fallen ? FALLEN_ROBE_SHADE : ANGEL_ROBE_SHADE;
-    const c3 = fallen ? FALLEN_ROBE_HEM   : ANGEL_ROBE_HEM;
+    const c0 = ANGEL_ROBE_LIGHT;
+    const c1 = ANGEL_ROBE_MID;
+    const c2 = ANGEL_ROBE_SHADE;
+    const c3 = ANGEL_ROBE_HEM;
 
     const robe = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.06, 0, 0, r);
     robe.addColorStop(0, c0);
@@ -1701,7 +1764,7 @@ class Angel extends Character {
     ctx.clip();
 
     // Folds
-    ctx.strokeStyle = fallen ? "rgba(0,0,0,0.45)" : "rgba(140,160,190,0.35)";
+    ctx.strokeStyle = "rgba(140,160,190,0.35)";
     ctx.lineCap = "round";
     for (let i = -2; i <= 2; i++) {
       ctx.lineWidth = r * 0.05;
@@ -1711,19 +1774,19 @@ class Angel extends Character {
       ctx.stroke();
     }
 
-    // A sash across the chest: gold while it still has a halo, smouldering red once it does not
-    ctx.strokeStyle = fallen ? FALLEN_EMBER_DEEP : ANGEL_GOLD_DEEP;
+    // A sash across the chest
+    ctx.strokeStyle = ANGEL_GOLD_DEEP;
     ctx.lineWidth = r * 0.15;
     ctx.beginPath();
     ctx.moveTo(-r * 0.95, -r * 0.1);
     ctx.quadraticCurveTo(0, r * 0.28, r * 0.95, -r * 0.32);
     ctx.stroke();
-    ctx.strokeStyle = fallen ? FALLEN_EMBER : ANGEL_GOLD;
+    ctx.strokeStyle = ANGEL_GOLD;
     ctx.lineWidth = r * 0.06;
     ctx.stroke();
 
     // Hood and eyes. Fallen eyes burn; the white form's are calm and gold.
-    ctx.fillStyle = fallen ? FALLEN_ROBE_SHADE : ANGEL_ROBE_SHADE;
+    ctx.fillStyle = ANGEL_ROBE_SHADE;
     ctx.beginPath();
     ctx.moveTo(-r * 0.7, -r * 0.12);
     ctx.quadraticCurveTo(-r * 0.58, -r * 1.0, 0, -r * 0.95);
@@ -1732,15 +1795,15 @@ class Angel extends Character {
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = fallen ? "#120e17" : "#5f6f89";
+    ctx.fillStyle = "#5f6f89";
     ctx.beginPath();
     ctx.ellipse(0, -r * 0.5, r * 0.52, r * 0.34, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const eye = fallen ? FALLEN_EMBER : ANGEL_GOLD;
+    const eye = ANGEL_GOLD;
     ctx.fillStyle = eye;
     ctx.shadowColor = eye;
-    ctx.shadowBlur = r * (fallen ? 0.5 : 0.3);
+    ctx.shadowBlur = r * 0.3;
     for (const s of [-1, 1]) {
       ctx.beginPath();
       ctx.ellipse(s * r * 0.2, -r * 0.5, r * 0.09, r * 0.13, 0, 0, Math.PI * 2);

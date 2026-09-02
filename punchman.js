@@ -12,7 +12,7 @@ const PUNCHMAN_RAGE_BASE_RANGE_BONUS     = 20; // extra reach added to the base 
 const PUNCHMAN_RAGE_ULTIMATE_RANGE_BONUS = 50; // additional reach on top, specifically from the ultimate
 const PUNCHMAN_RAGE_SPEED_MULT  = 1.75;  // movement speed multiplier during Rampage Mode
 const PUNCHMAN_RAGE_DURATION    = 5.0;   // seconds Rampage Mode lasts
-const PUNCHMAN_CHARGE_TIME      = 25.0;  // seconds needed to fill the ultimate meter
+const PUNCHMAN_CHARGE_TIME      = 20.0;  // seconds needed to fill the ultimate meter
 const PUNCHMAN_DAMAGE_CHARGE_BONUS = 0.1;  // extra charge-seconds gained per point of damage dealt while charging
 const PUNCHMAN_TAKEN_CHARGE_BONUS  = 0.1;  // extra charge-seconds gained per point of damage taken while charging
 const PUNCHMAN_MAX_HP           = 150;   // placeholder HP, not specified yet
@@ -27,7 +27,8 @@ class PunchMan extends Character {
       size: CHAR_BASE_SIZE,
       color: "#e0a030",
       maxHp: PUNCHMAN_MAX_HP,
-      name: "拳擊手",
+      name: "Punch Man",
+      nameZh: "拳擊手",
       speed: 330,
     });
 
@@ -223,7 +224,7 @@ class PunchMan extends Character {
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     if (this.skillState === "rage") {
-      this.drawHudNote(ctx, x, ny, `狂暴 ${this.chargeTime.toFixed(1)}s`, "#ff7028");
+      this.drawHudNote(ctx, x, ny, L(`Rampage ${this.chargeTime.toFixed(1)}s`, `狂暴 ${this.chargeTime.toFixed(1)}s`), "#ff7028");
     }
   }
 }

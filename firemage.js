@@ -593,7 +593,8 @@ class FireMage extends Character {
       size: FIREMAGE_SIZE,
       color: "#ff5a1f",
       maxHp: FIREMAGE_MAX_HP,
-      name: "火法師",
+      name: "Fire Mage",
+      nameZh: "火法師",
       speed: FIREMAGE_SPEED,
     });
 
@@ -2097,7 +2098,7 @@ class FireMage extends Character {
   drawHud(ctx, x, y, w) {
     const ny = super.drawHud(ctx, x, y, w);
     const arms = this.tentacles.filter((t) => t.alive).length;
-    if (arms) this.drawHudNote(ctx, x, ny, `${arms} 條觸手`, "#ff8a2a");
-    else if (this.lavaPatches.length) this.drawHudNote(ctx, x, ny, `${this.lavaPatches.length} 處岩漿`);
+    if (arms) this.drawHudNote(ctx, x, ny, L(`${arms} tentacles`, `${arms} 條觸手`), "#ff8a2a");
+    else if (this.lavaPatches.length) this.drawHudNote(ctx, x, ny, L(`${this.lavaPatches.length} lava`, `${this.lavaPatches.length} 處岩漿`));
   }
 }

@@ -99,6 +99,13 @@ loadSfx("firemageWhip", "sfx_firemage_whip.mp3");         // a tentacle's slam l
 loadSfx("firemageLava", "sfx_firemage_lava.mp3");         // looped for exactly as long as any lava is burning — see firemage.js
 loadSfx("firemageOnLava", "sfx_firemage_onlava.mp3");     // one per lava damage tick, so 5x/sec while someone stands in it
 loadSfx("firemageFireworks", "sfx_firemage_fireworks.mp3"); // the victory display; its length sets how long the fireworks run
+loadSfx("angelShoot", "sfx_angel_shoot.mp3");           // the Angel's bolt leaving her hand
+loadSfx("angelHit", "sfx_angel_hit.mp3");               // and that bolt landing on a body
+loadSfx("angelSword", "sfx_angel_sword.mp3");           // the judgement blade forging over a marked head
+loadSfx("angelSwordHit", "sfx_angel_sword_hit.mp3");    // and that blade coming down
+loadSfx("angelUlt", "sfx_angel_ult.mp3");               // looped for exactly as long as the rite runs — see Angel.beginUltimate
+loadSfx("angelUltLaser", "sfx_angel_ult_laser.mp3");    // one per volley, not one per beam
+loadSfx("angelVictory", "sfx_angel_victory.mp3");       // the deluge
 loadSfx("archerBow", "sfx_archer_bow.mp3");             // an ordinary arrow leaving the bow
 loadSfx("archerBowHit", "sfx_archer_bowhit.mp3");       // an arrow landing on a body
 loadSfx("archerUltCharge", "sfx_archer_arcultcharge.mp3"); // the five-second Sun Shot draw
