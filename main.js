@@ -9,6 +9,8 @@ const ROUND_END_GRACE = 3.0; // seconds after a winner is decided before we cut 
 // keep in sync with it). `excludeFromTwitch: true` keeps an entry pickable in the normal manual
 // setup screen while leaving it out of triggerTwitchBattle()'s random draw — for a character
 // that's still new/untested and not meant to show up unannounced on someone's stream yet.
+// `excludeFromDraw: true` is the separate opt-out for the 5-a-side lineup draw (see team5.js) —
+// a character that would simply decide the match on its own rather than one that is untested.
 const ROSTER = [
   { label: "Giant", ctor: () => new Giant(0, 0) },
   { label: "Punch Man", ctor: () => new PunchMan(0, 0) },
@@ -20,15 +22,19 @@ const ROSTER = [
   { label: "Ninja", ctor: () => new Ninja(0, 0) },
   { label: "Virus", ctor: () => new Virus(0, 0) },
   { label: "Fire Mage", ctor: () => new FireMage(0, 0), excludeFromTwitch: true },
-  { label: "Archer", ctor: () => new Archer(0, 0), excludeFromTwitch: true },
+  // Out of the 5v5 draw as well: 94% overall and no matchup below 83% (Archer is not balanced
+  // against anything). Drawn into a squad it would just be the answer to that whole side.
+  { label: "Archer", ctor: () => new Archer(0, 0), excludeFromTwitch: true, excludeFromDraw: true },
   { label: "Troll", ctor: () => new Troll(0, 0) },
   { label: "Earth Mage", ctor: () => new EarthMage(0, 0) },
   // Brand new and not balance-tested yet, so kept out of the Twitch random draw for now —
   // same treatment every character gets until its numbers have been measured.
   { label: "Angel", ctor: () => new Angel(0, 0) },
+  // Brand new and not balance-tested yet, so kept out of the Twitch random draw for now.
+  { label: "Poop Man", ctor: () => new PoopMan(0, 0), excludeFromTwitch: true },
 ];
 
-let gameMode = "1v1"; // "1v1" | "vsboss" — which mode is currently toggled in the setup screen
+let gameMode = "1v1"; // "1v1" | "vsboss" | "team5" | "lab" — which mode the setup screen has toggled
 
 let pickA = 0; // ROSTER index for the left-corner fighter
 let pickB = 1; // ROSTER index for the right-corner fighter
@@ -219,6 +225,9 @@ function reset() {
   // And the Angel's rite, which loops for as long as its five spirits are walking the ring.
   if (typeof fighterA.stopAllRiteSounds === "function") fighterA.stopAllRiteSounds();
   if (typeof fighterB.stopAllRiteSounds === "function") fighterB.stopAllRiteSounds();
+  // Poop Man's spray voice is 3.29s long and a round can easily end in the middle of one.
+  if (typeof fighterA.stopAllPoopSounds === "function") fighterA.stopAllPoopSounds();
+  if (typeof fighterB.stopAllPoopSounds === "function") fighterB.stopAllPoopSounds();
   fighterA = ROSTER[pickA].ctor();
   fighterB = ROSTER[pickB].ctor();
   Object.assign(fighterA, randomVelocity(fighterA.speed));
@@ -356,6 +365,10 @@ function placeVsBoss() {
 
 function startVsBossRound() {
   vsBossWinner = null;
+  // Same wipe 1v1's reset() does, and for the same reason: pillars left registered by the last
+  // round's Earth Mage would go on blocking projectiles in this one with nothing on screen to
+  // explain it. See clearWorldObstacles in combat.js.
+  clearWorldObstacles();
   allies = vsBossPicks.slice(0, 3).map((idx) => ROSTER[idx].ctor());
   boss = ROSTER[vsBossPicks[3]].ctor();
   boss.maxHp = Math.round(boss.maxHp * BOSS_HP_MULTIPLIER);
@@ -433,19 +446,49 @@ function resetPicks() {
   selectB = null;
   vsBossPicks = [null, null, null, null];
   vsBossPickStep = 0;
+  // Prefilled with a random ten rather than blanked, so the relay is one click away from
+  // running — picking all ten by hand is optional, not a toll gate. See team5.js.
+  resetTeam5Picks();
+}
+
+function pickTeam5Slot(index) {
+  if (mode !== "setup" || gameMode !== "team5" || index < 0 || index >= ROSTER.length) return;
+  // A fighter already sitting in another slot is moved, not duplicated — clicking through the
+  // ten slots with the random prefill in place would otherwise stall on every repeat.
+  const existing = team5Picks.indexOf(index);
+  if (existing !== -1 && existing !== team5PickStep) {
+    team5Picks[existing] = team5Picks[team5PickStep];
+  }
+  team5Picks[team5PickStep] = index;
+  team5PickStep++;
+  if (team5PickStep >= TEAM5_SIZE * 2) {
+    team5PickStep = 0;
+    closeSetup();          // NOT a bare mode = "battle": the relay needs the 16:9 canvas
+    // Reveal, but do NOT reroll: these are the ten that were just picked by hand, and they get
+    // the same walk-onto-the-boards opening a random draw gets.
+    startTeam5Round(true, false);
+  }
 }
 
 // Swaps the canvas between the 9:16 battle frame and the 16:9 lab frame. The recording
 // canvas has to follow, since it mirrors the same frame at a higher resolution.
 function applyLayout(name) {
   if (!setArenaLayout(name)) return;
-  canvas.width = WIDTH;
-  canvas.height = HEIGHT;
+  // WIDTH/HEIGHT are LOGICAL; the backing store is that times the layout's zoom, and render()
+  // puts a matching scale() on the context so every drawing call stays in logical units.
+  const z = layoutZoom();
+  canvas.width = WIDTH * z;
+  canvas.height = HEIGHT * z;
   resizeRecordCanvas();
 }
 
 function layoutForMode(m) {
-  return m === "lab" ? "lab" : "portrait";
+  if (m === "lab") return "lab";
+  // The relay is the one battle mode authored for a 16:9 frame — see team5.js. The royale wants
+  // the same floor for a different reason: fifteen bodies at once need the room.
+  if (m === "team5") return "landscape";
+  if (m === "royale") return "landscape";
+  return "portrait";
 }
 
 function openSetup() {
@@ -471,12 +514,42 @@ function pointInRect(x, y, rect) {
   return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
 }
 
-const SETUP_MODE_1V1_RECT = { x: 130, y: 190, w: 140, h: 40 };
-const SETUP_MODE_VSBOSS_RECT = { x: 290, y: 190, w: 140, h: 40 };
-const SETUP_MODE_LAB_RECT = { x: 450, y: 190, w: 140, h: 40 };
+// Six buttons across a 720-wide frame, narrowed again to keep them on one row: 6 x 96 plus
+// five 4px gaps is 596, centred leaves 62 either side. "GAUNTLET" is the longest label and
+// measures about 80px at the 16px bold the buttons use, so it still clears 96.
+const SETUP_MODE_1V1_RECT = { x: 62, y: 190, w: 96, h: 40 };
+const SETUP_MODE_VSBOSS_RECT = { x: 162, y: 190, w: 96, h: 40 };
+const SETUP_MODE_TEAM5_RECT = { x: 262, y: 190, w: 96, h: 40 };
+const SETUP_MODE_GAUNTLET_RECT = { x: 362, y: 190, w: 96, h: 40 };
+const SETUP_MODE_ROYALE_RECT = { x: 462, y: 190, w: 96, h: 40 };
+const SETUP_MODE_LAB_RECT = { x: 562, y: 190, w: 96, h: 40 };
+// 5v5 only: skips the ten-slot picker entirely and runs the lineup draw on screen — see team5.js.
+// Bottom edge at 272, clearing the picker hint that follows at baseline 292 (which itself has
+// to stay clear of the first roster card's top edge at 293).
+const SETUP_DRAW_RECT = { x: 210, y: 240, w: 300, h: 32 };
 const SETUP_ROSTER_START_Y = 320;
-const SETUP_ROSTER_ROW_H = 70;
+const SETUP_ROSTER_ROW_H = 70;      // the pitch it PREFERS — see setupRowPitch
 const SETUP_ROSTER_CARD = { x: 160, w: 400, h: 54 };
+const SETUP_ROSTER_BOTTOM_PAD = 24;
+
+// The picker's pitch, tightened as far as it has to be to fit the whole cast on the 9:16 setup
+// screen. It used to be a flat 70, which was fine for the roster this screen was written for and
+// silently stopped working as characters were added: the 15th sat at y=1300 on a 1280-tall
+// canvas, so it was drawn off the bottom edge AND hit-tested there, which is why it could not be
+// clicked. Deriving it means the next character to be added cannot fall off the same way.
+function setupRowPitch() {
+  const avail = HEIGHT - SETUP_ROSTER_START_Y - SETUP_ROSTER_BOTTOM_PAD;
+  return Math.min(SETUP_ROSTER_ROW_H, avail / Math.max(1, ROSTER.length));
+}
+
+function setupRowY(i) {
+  return SETUP_ROSTER_START_Y + i * setupRowPitch();
+}
+
+// Shrinks with the pitch so the cards never overlap once the list is tight.
+function setupCardH() {
+  return Math.min(SETUP_ROSTER_CARD.h, setupRowPitch() - 8);
+}
 
 canvas.addEventListener("click", (e) => {
   // The battle screens stay clean and unclickable, but the lab is a tool, not a recording —
@@ -488,8 +561,10 @@ canvas.addEventListener("click", (e) => {
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
-  const x = (e.clientX - rect.left) * scaleX;
-  const y = (e.clientY - rect.top) * scaleY;
+  // ...and then back out of the layout zoom, since every rect below is in logical units.
+  const z = layoutZoom();
+  const x = (e.clientX - rect.left) * scaleX / z;
+  const y = (e.clientY - rect.top) * scaleY / z;
 
   if (mode === "battle") {
     labClick(x, y);
@@ -504,6 +579,27 @@ canvas.addEventListener("click", (e) => {
     if (gameMode !== "vsboss") { gameMode = "vsboss"; resetPicks(); }
     return;
   }
+  if (gameMode === "team5" && pointInRect(x, y, SETUP_DRAW_RECT)) {
+    closeSetup();          // NOT a bare mode = "battle": the relay needs the 16:9 canvas
+    startTeam5Round(true);
+    return;
+  }
+  if (pointInRect(x, y, SETUP_MODE_TEAM5_RECT)) {
+    if (gameMode !== "team5") { gameMode = "team5"; resetPicks(); }
+    return;
+  }
+  if (pointInRect(x, y, SETUP_MODE_ROYALE_RECT)) {
+    // Nothing to pick — everybody is in it. Selecting the mode IS the setup.
+    gameMode = "royale";
+    resetPicks();
+    closeSetup();
+    startRoyaleRound();
+    return;
+  }
+  if (pointInRect(x, y, SETUP_MODE_GAUNTLET_RECT)) {
+    if (gameMode !== "gauntlet") { gameMode = "gauntlet"; resetPicks(); }
+    return;
+  }
   if (pointInRect(x, y, SETUP_MODE_LAB_RECT)) {
     if (gameMode !== "lab") { gameMode = "lab"; resetPicks(); }
     return;
@@ -512,13 +608,19 @@ canvas.addEventListener("click", (e) => {
   for (let i = 0; i < ROSTER.length; i++) {
     const cardRect = {
       x: SETUP_ROSTER_CARD.x,
-      y: SETUP_ROSTER_START_Y + i * SETUP_ROSTER_ROW_H - SETUP_ROSTER_CARD.h / 2,
+      y: setupRowY(i) - setupCardH() / 2,
       w: SETUP_ROSTER_CARD.w,
-      h: SETUP_ROSTER_CARD.h,
+      h: setupCardH(),
     };
     if (pointInRect(x, y, cardRect)) {
       if (gameMode === "1v1") pickRosterSlot(i);
       else if (gameMode === "vsboss") pickVsBossSlot(i);
+      else if (gameMode === "team5") pickTeam5Slot(i);
+      else if (gameMode === "gauntlet") {
+        // One pick is the whole setup: everybody else IS the opposition.
+        closeSetup();
+        startGauntletRun(i);
+      }
       else {
         // Lab: one pick is all it takes. Switch the frame first, since startLab() places the
         // character using the arena's dimensions.
@@ -559,7 +661,25 @@ window.addEventListener("keydown", (e) => {
 
   if (e.key === "y" || e.key === "Y" || e.key === "n" || e.key === "N") {
     const decision = (e.key === "y" || e.key === "Y") ? "keep" : "discard";
-    if (gameMode === "1v1") {
+    if (gameMode === "team5") {
+      if (team5State === "prompting" && team5PromptReady) {
+        decision === "keep" ? keepTeam5Recording() : discardTeam5Recording();
+      } else if (team5State === "ended" || team5State === "prompting") {
+        team5QueuedDecision = decision;
+      }
+    } else if (gameMode === "royale") {
+      if (royaleState === "prompting" && royalePromptReady) {
+        decision === "keep" ? keepRoyaleRecording() : discardRoyaleRecording();
+      } else if (royaleState === "ended" || royaleState === "prompting") {
+        royaleQueuedDecision = decision;
+      }
+    } else if (gameMode === "gauntlet") {
+      if (gauntletState === "prompting" && gauntletPromptReady) {
+        decision === "keep" ? keepGauntletRecording() : discardGauntletRecording();
+      } else if (gauntletState === "ended" || gauntletState === "prompting") {
+        gauntletQueuedDecision = decision;
+      }
+    } else if (gameMode === "1v1") {
       if (roundState === "prompting" && promptReady) {
         decision === "keep" ? keepRecording() : discardRecording();
       } else if (roundState === "ended" || roundState === "prompting") {
@@ -579,7 +699,15 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "r" || e.key === "R") {
     if (isRecording) stopRecording(); // mid-round manual reset: throw away this take
     if (gameMode === "1v1") startRound();
+    else if (gameMode === "team5") startTeam5Round(true, false);   // same ten, revealed again
+    else if (gameMode === "gauntlet") startGauntletRun(gauntletHeroIdx);  // same challenger, fresh order
+    else if (gameMode === "royale") startRoyaleRound();
     else startVsBossRound();
+  }
+  // A fresh lineup draw, without going back through the setup screen.
+  if ((e.key === "d" || e.key === "D") && gameMode === "team5") {
+    if (isRecording) stopRecording();
+    startTeam5Round(true);
   }
 });
 
@@ -633,11 +761,18 @@ function drawSetupOverlay(ctx) {
 
   drawToggleButton(ctx, SETUP_MODE_1V1_RECT, "1v1", gameMode === "1v1");
   drawToggleButton(ctx, SETUP_MODE_VSBOSS_RECT, "VS BOSS", gameMode === "vsboss");
+  drawToggleButton(ctx, SETUP_MODE_TEAM5_RECT, "5v5", gameMode === "team5");
+  drawToggleButton(ctx, SETUP_MODE_GAUNTLET_RECT, "GAUNTLET", gameMode === "gauntlet");
+  drawToggleButton(ctx, SETUP_MODE_ROYALE_RECT, "ROYALE", gameMode === "royale");
   drawToggleButton(ctx, SETUP_MODE_LAB_RECT, "LAB", gameMode === "lab");
 
-  ctx.font = "16px Arial";
-  ctx.fillStyle = "rgba(255,255,255,0.55)";
-  ctx.fillText("Press Tab to close", WIDTH / 2, 255);
+  if (gameMode === "team5") {
+    drawToggleButton(ctx, SETUP_DRAW_RECT, "AUTO-DRAW BOTH SQUADS", false);
+  } else {
+    ctx.font = "16px Arial";
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.fillText("Press Tab to close", WIDTH / 2, 255);
+  }
 
   ctx.font = "18px Arial";
   ctx.fillStyle = "rgba(255,255,255,0.85)";
@@ -650,13 +785,22 @@ function drawSetupOverlay(ctx) {
   } else if (gameMode === "vsboss") {
     const stepLabel = VS_BOSS_STEP_LABELS[Math.min(vsBossPickStep, 3)];
     ctx.fillText(`Click a fighter to ${stepLabel}`, WIDTH / 2, 290);
+  } else if (gameMode === "team5") {
+    const team = team5PickStep < TEAM5_SIZE ? "A" : "B";
+    const slot = (team5PickStep % TEAM5_SIZE) + 1;
+    ctx.fillText(`…or click a fighter for TEAM ${team} slot ${slot}`, WIDTH / 2, 292);
+  } else if (gameMode === "royale") {
+    ctx.fillText("Everyone is in — pick ROYALE again to re-roll", WIDTH / 2, 290);
+  } else if (gameMode === "gauntlet") {
+    ctx.fillText("Click a fighter to send it against the whole roster", WIDTH / 2, 290);
   } else {
     ctx.fillText("Click a fighter to test it in the lab", WIDTH / 2, 290);
   }
 
   ROSTER.forEach((entry, i) => {
-    const cy = SETUP_ROSTER_START_Y + i * SETUP_ROSTER_ROW_H;
-    const cardY = cy - SETUP_ROSTER_CARD.h / 2;
+    const cy = setupRowY(i);
+    const cardH = setupCardH();
+    const cardY = cy - cardH / 2;
 
     let tag = "";
     let color = "rgba(255,255,255,0.85)";
@@ -664,6 +808,14 @@ function drawSetupOverlay(ctx) {
     if (gameMode === "1v1") {
       if (selectA === i) { tag = " (Left)"; color = "#64f064"; cardFill = "rgba(100,240,100,0.12)"; }
       else if (selectB === i) { tag = " (Right)"; color = "#64a0ff"; cardFill = "rgba(100,160,255,0.12)"; }
+    } else if (gameMode === "team5") {
+      const slotIndex = team5Picks.indexOf(i);
+      if (slotIndex !== -1) {
+        const teamA = slotIndex < TEAM5_SIZE;
+        tag = ` (${teamA ? "A" : "B"}${(slotIndex % TEAM5_SIZE) + 1})`;
+        color = teamA ? TEAM5_A_COLOR : TEAM5_B_COLOR;
+        cardFill = teamA ? "rgba(100,240,100,0.12)" : "rgba(100,160,255,0.12)";
+      }
     } else {
       const slotIndex = vsBossPicks.indexOf(i);
       if (slotIndex === 3) { tag = " (BOSS)"; color = "#ff6464"; cardFill = "rgba(255,100,100,0.12)"; }
@@ -671,10 +823,10 @@ function drawSetupOverlay(ctx) {
     }
 
     ctx.fillStyle = cardFill;
-    ctx.fillRect(SETUP_ROSTER_CARD.x, cardY, SETUP_ROSTER_CARD.w, SETUP_ROSTER_CARD.h);
+    ctx.fillRect(SETUP_ROSTER_CARD.x, cardY, SETUP_ROSTER_CARD.w, cardH);
     ctx.strokeStyle = "rgba(255,255,255,0.25)";
     ctx.lineWidth = 1.5;
-    ctx.strokeRect(SETUP_ROSTER_CARD.x, cardY, SETUP_ROSTER_CARD.w, SETUP_ROSTER_CARD.h);
+    ctx.strokeRect(SETUP_ROSTER_CARD.x, cardY, SETUP_ROSTER_CARD.w, cardH);
 
     ctx.font = "bold 22px Arial";
     ctx.fillStyle = color;
@@ -769,7 +921,24 @@ function render(time) {
   // off on unpause, rather than having quietly drained while nothing was moving.
   if (!paused && hitStopTimer > 0) hitStopTimer -= dt;
 
-  if (!frozen && gameMode === "1v1" && mode === "battle" && (roundState === "playing" || roundState === "ended")) {
+  if (!frozen && gameMode === "team5" && mode === "battle" && team5State === "drawing") {
+    team5UpdateDraw(dt);
+    updateParticles(dt);
+    updateFlashes(dt);
+    updateSmokePuffs(dt);
+  }
+
+  // The relay runs on this same block on purpose — it is two fighters in an arena, exactly
+  // like 1v1, and only the question of who gets sent in next differs. See team5.js.
+  const relaySim = gameMode === "team5"
+    && (team5State === "playing" || team5State === "swapping" || team5State === "ended");
+  // ...and so does the gauntlet, for the same reason: one challenger and one opponent in an
+  // arena is a duel, and only who arrives next differs. See gauntlet.js.
+  const gauntletSim = gameMode === "gauntlet"
+    && (gauntletState === "playing" || gauntletState === "swapping" || gauntletState === "ended");
+  if (!frozen && (relaySim || gauntletSim
+                  || (gameMode === "1v1" && (roundState === "playing" || roundState === "ended")))
+      && mode === "battle") {
     // A fighter that's currently untrackable (e.g. one hidden in its own smoke) is excluded
     // entirely — their own targeting/aiming already knows how to handle "no opponent" (same
     // path as a dead one), so this alone is enough to make them lose track of it without
@@ -790,7 +959,30 @@ function render(time) {
     for (const extra of aExtra) resolveCollision(fighterB, extra);
     for (const extra of bExtra) resolveCollision(fighterA, extra);
 
-    checkWinner();
+    // Solid bodies owned by a character — currently only Poop Man's boulder — separate everyone
+    // AFTER every body has finished moving for the frame. Doing it inside the owner's own update
+    // is too early: the opponent has not moved yet at that point, and it walks straight back into
+    // the thing in the same frame, so the separation is invisible and the overlap is real.
+    // Optional hook, so this no-ops for the other fourteen characters.
+    const allBodies = [fighterA, fighterB, ...aExtra, ...bExtra];
+    for (const f of [fighterA, fighterB]) {
+      if (typeof f.resolveSolids === "function") f.resolveSolids(dt, allBodies);
+    }
+
+    if (relaySim) team5Tick(dt);
+    else if (gauntletSim) gauntletTick(dt);
+    else checkWinner();
+    updateParticles(dt);
+    updateFlashes(dt);
+    updateSmokePuffs(dt);
+    updateWallCracks(dt);
+    updateDamageNumbers(dt);
+  }
+
+  if (!frozen && gameMode === "royale" && mode === "battle"
+      && (royaleState === "playing" || royaleState === "ended")) {
+    royaleUpdate(dt);
+    royaleTick();
     updateParticles(dt);
     updateFlashes(dt);
     updateSmokePuffs(dt);
@@ -814,6 +1006,16 @@ function render(time) {
     resolveCollision(allies[0], allies[1]);
     resolveCollision(allies[0], allies[2]);
     resolveCollision(allies[1], allies[2]);
+
+    // Solid bodies owned by a character — currently only Poop Man's boulder — separate everyone
+    // AFTER every body has finished moving for the frame. Doing it inside the owner's own update
+    // is too early: the opponent has not moved yet at that point, and it walks straight back into
+    // the thing in the same frame, so the separation is invisible and the overlap is real.
+    // Optional hook, so this no-ops for the other fourteen characters.
+    const bossBodies = [boss, ...allies];
+    for (const f of bossBodies) {
+      if (typeof f.resolveSolids === "function") f.resolveSolids(dt, bossBodies);
+    }
 
     checkVsBossWinner();
     updateParticles(dt);
@@ -870,7 +1072,16 @@ function render(time) {
 
     drawBackground(c);
 
-    const combatants = gameMode === "1v1" ? [fighterA, fighterB] : (boss ? [boss, ...allies] : []);
+    // Nobody is on the field during the lineup draw — the arena is deliberately empty behind it.
+    // The gauntlet counts too: it is one challenger and one opponent in the arena, and this flag
+    // is what decides whether the two of them are drawn at all, whether their ground effects go
+    // down, and who is eligible for a victory overlay. Leaving it out drew an empty arena with a
+    // working HUD over it.
+    const twoUp = gameMode === "1v1" || gameMode === "gauntlet"
+                  || (gameMode === "team5" && team5State !== "drawing");
+    const combatants = gameMode === "royale" ? royaleFighters
+                     : twoUp ? [fighterA, fighterB]
+                     : (boss ? [boss, ...allies] : []);
     // A character celebrating victory can request the whole scene get pushed in on it — a real
     // camera zoom (everything scales together around a focus point), not just itself drawn
     // bigger — see Character.victoryCameraZoom (default null) and Ninja's override.
@@ -914,17 +1125,23 @@ function render(time) {
       drawWallCracks(c);
       if (gameMode === "lab") {
         labDraw(c);
-      } else if (gameMode === "1v1") {
+      } else if (twoUp) {
         // Ground effects all go down first regardless of order — they are floor decals, and
         // every one of them belongs under every fighter.
         fighterA.drawGroundEffects(c);
         fighterB.drawGroundEffects(c);
         for (const it of collectDepthItems([fighterA, fighterB])) it.draw(c);
+      } else if (gameMode === "royale") {
+        for (const f of royaleFighters) f.drawGroundEffects(c);
+        for (const it of collectDepthItems(royaleFighters)) it.draw(c);
       } else if (boss) {
         boss.drawGroundEffects(c);
         for (const ally of allies) ally.drawGroundEffects(c);
         for (const it of collectDepthItems([boss, ...allies])) it.draw(c);
       }
+      // The waiting squads, standing in line outside their own side of the arena. After the
+      // depth pass so they sit above the Angel's ring, which sweeps through that same margin.
+      if (gameMode === "team5") drawTeam5Bench(c);
       drawParticles(c);
       drawFlashes(c);
       drawSmokePuffs(c);
@@ -932,15 +1149,31 @@ function render(time) {
       // The mirror of drawGroundEffects: anything a character puts OVER the whole scene rather
       // than under it, while the round is still being fought (Archer's falling sun). Distinct
       // from drawVictoryOverlay, which only runs once someone has already won.
-      if (gameMode === "1v1") {
+      if (twoUp) {
         fighterA.drawOverlayEffects(c);
         fighterB.drawOverlayEffects(c);
+      } else if (gameMode === "royale") {
+        for (const f of royaleFighters) f.drawOverlayEffects(c);
       } else if (boss) {
         boss.drawOverlayEffects(c);
         for (const ally of allies) ally.drawOverlayEffects(c);
       }
     }
     c.restore();
+
+    // Opaque, and after every last thing drawn in world space, so effects authored against the
+    // portrait frame that legitimately overhang the arena — the Angel's ring is 534px wide in
+    // this layout and reaches deep into both columns — pass BEHIND the squad lists rather than
+    // over them. Cheaper and far less risky than clipping the whole world render.
+    // Guarded on the LAYOUT, not just the mode: openSetup() forces the canvas back to portrait
+    // while the setup screen is up, and two 340px columns authored for a 1280-wide frame would
+    // take up 680 of the 720 available and crowd the picker showing over them.
+    // The squad columns exist only for the lineup draw — see team5SetArena. Once the draw hands
+    // over they come down and the arena has already opened out into their space.
+    if (gameMode === "team5" && arenaLayout === "landscape" && team5Draw) {
+      drawTeam5DrawStage(c);   // inside the arena, so it goes under the columns
+      drawTeam5Panels(c);
+    }
 
     if (isolate) {
       // Fixed in screen space (drawn after the restore, so the zoom doesn't stretch it) —
@@ -960,6 +1193,8 @@ function render(time) {
         c.textAlign = "center";
         c.fillText(`LAB — ${labFighter ? labFighter.name : "-"}`, ARENA.x + ARENA.w / 2, 58);
         labDrawPanel(c);
+      } else if (gameMode === "team5") {
+        if (arenaLayout === "landscape") drawTeam5Title(c);
       } else if (gameMode === "1v1") {
         // The twitch overlay skips the "X vs Y" banner — see hudNameFont() in arena.js, which is
         // what puts the size back into the fighters' own HUD names instead.
@@ -971,6 +1206,13 @@ function render(time) {
       if (gameMode === "1v1") {
         fighterA.drawHud(c, HUD_MARGIN, HUD_Y, HUD_W);
         fighterB.drawHud(c, WIDTH - HUD_MARGIN - HUD_W, HUD_Y, HUD_W);
+      } else if (gameMode === "royale") {
+        drawRoyaleHud(c);
+      } else if (gameMode === "gauntlet") {
+        drawGauntletHud(c);
+        drawGauntletProgress(c);
+      } else if (gameMode === "team5" && arenaLayout === "landscape") {
+        drawTeam5MatchHud(c);
       } else if (gameMode === "vsboss" && boss) {
         drawVsBossHud(c);
       }
@@ -986,18 +1228,54 @@ function render(time) {
     // readable — see spawnSpeedLines in particles.js.
     drawSpeedLines(c);
 
+    if (gameMode === "royale" && mode === "battle" && royaleState === "prompting") drawRoyalePromptOverlay(c);
+    if (gameMode === "gauntlet" && mode === "battle" && gauntletState === "prompting") drawGauntletPromptOverlay(c);
     if (gameMode === "1v1" && mode === "battle" && roundState === "prompting") drawPromptOverlay(c);
     if (gameMode === "vsboss" && mode === "battle" && vsBossState === "prompting") drawVsBossPromptOverlay(c);
+    if (gameMode === "team5" && mode === "battle" && team5State === "prompting") drawTeam5PromptOverlay(c);
     if (mode === "setup") drawSetupOverlay(c);
   }
 
+  // One scale() for the whole frame — world and HUD alike — so every drawing call in the
+  // codebase keeps working in logical units and the relay layout simply comes out 1.4x bigger.
+  // See layoutZoom in arena.js.
+  const z = layoutZoom();
+  ctx.setTransform(z, 0, 0, z, 0, 0);
   drawFrame(ctx);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   if (isRecording) {
     recordCtx.save();
-    recordCtx.setTransform(RECORD_SCALE, 0, 0, RECORD_SCALE, 0, 0);
+    const rs = recordScale() * z;   // per-layout record scale, times the layout zoom
+    recordCtx.setTransform(rs, 0, 0, rs, 0, 0);
     drawFrame(recordCtx);
     recordCtx.restore();
+  }
+
+  if (!paused && gameMode === "royale" && mode === "battle" && royaleState === "ended") {
+    royaleEndTimer += dt;
+    if (royaleEndTimer >= ROUND_END_GRACE) {
+      royaleState = "prompting";
+      stopRecording().then((blob) => {
+        royalePendingBlob = blob;
+        royalePromptReady = true;
+        if (royaleQueuedDecision === "keep") keepRoyaleRecording();
+        else if (royaleQueuedDecision === "discard") discardRoyaleRecording();
+      });
+    }
+  }
+
+  if (!paused && gameMode === "gauntlet" && mode === "battle" && gauntletState === "ended") {
+    gauntletEndTimer += dt;
+    if (gauntletEndTimer >= ROUND_END_GRACE) {
+      gauntletState = "prompting";
+      stopRecording().then((blob) => {
+        gauntletPendingBlob = blob;
+        gauntletPromptReady = true;
+        if (gauntletQueuedDecision === "keep") keepGauntletRecording();
+        else if (gauntletQueuedDecision === "discard") discardGauntletRecording();
+      });
+    }
   }
 
   if (!paused && gameMode === "1v1" && mode === "battle" && roundState === "ended") {
@@ -1021,6 +1299,19 @@ function render(time) {
           else if (queuedDecision === "discard") discardRecording();
         });
       }
+    }
+  }
+
+  if (!paused && gameMode === "team5" && mode === "battle" && team5State === "ended") {
+    team5EndTimer += dt;
+    if (team5EndTimer >= ROUND_END_GRACE) {
+      team5State = "prompting";
+      stopRecording().then((blob) => {
+        team5PendingBlob = blob;
+        team5PromptReady = true;
+        if (team5QueuedDecision === "keep") keepTeam5Recording();
+        else if (team5QueuedDecision === "discard") discardTeam5Recording();
+      });
     }
   }
 

@@ -124,7 +124,7 @@ const EARTHMAGE_TOPPLE_NUDGE   = 0.075;        // the initial lean that breaks i
 // hanging mid-air. Never reached in normal play.
 const EARTHMAGE_TOPPLE_MAX_TIME = 2.0;
 const EARTHMAGE_PILLAR_DAMAGE = 18;
-const EARTHMAGE_PILLAR_STUN   = 2.0;
+const EARTHMAGE_PILLAR_STUN   = 1.25;
 
 // The robe, brightened ~45% over the original set, which read as very dark against the arena's
 // own dark floor. Scaled multiplicatively rather than blended toward white — blending washes the
@@ -590,6 +590,17 @@ class EarthMage extends Character {
 
   // Called by reset() in main.js: a round ending mid-rise would otherwise leave the loop running
   // with nothing left alive that could ever stop it.
+  // Hands back every obstacle this mage ever registered. Pillars are registered globally so a
+  // projectile can be stopped by one without the engine knowing what an Earth Mage is (see
+  // combat.js) — which also means the registry outlives the mage unless something gives them
+  // back. In 1v1 the round ends and reset() wipes the registry, but a relay throws fighters away
+  // mid-match (see team5.js): the mage was discarded, its pillars stopped being drawn with it,
+  // and three invisible circles went on eating arrows for the rest of the match.
+  releaseWorldObstacles() {
+    for (const p of this.pillars) removeWorldObstacle(p);
+    if (this.throne) removeWorldObstacle(this.throne);
+  }
+
   stopAllPillarSounds() {
     for (const p of this.pillars) this.stopRiseSound(p);
     if (this.throneSound) {

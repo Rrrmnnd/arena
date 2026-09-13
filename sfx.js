@@ -8,6 +8,31 @@ const sfxBuffers = {};
 // includes audio, alongside the normal speaker output.
 const recordDestination = audioCtx.createMediaStreamDestination();
 
+// Recording keep-alive: an inaudible signal that runs for the life of the page purely so the
+// record bus is never digitally silent.
+//
+// A MediaStreamAudioDestinationNode carrying nothing produces nothing, and MediaRecorder's Opus
+// encoder writes no packets for that silence. The video track meanwhile keeps producing frames
+// on real time, so the recorded audio track ends up far shorter than the picture and the sound
+// runs progressively further ahead of it — which is exactly the drift that shows up over a
+// three-minute relay match.
+//
+// Measured on a 5.01s take with nothing playing: the video track came out at 5.01s and the audio
+// track was so empty that decodeAudioData could not open it at all. With this node running, the
+// same take gives 4.90s of audio against 5.00s of video.
+//
+// Connected ONLY to recordDestination, never to audioCtx.destination, so it is inaudible by
+// construction rather than merely quiet — it never reaches the speakers at all. 40Hz at -80dB
+// is far below anything a decoder will pass through to a listener, but it is not zero, which is
+// the only thing the encoder cares about.
+const recordKeepAlive = audioCtx.createOscillator();
+const recordKeepAliveGain = audioCtx.createGain();
+recordKeepAlive.frequency.value = 40;
+recordKeepAliveGain.gain.value = 0.0001;
+recordKeepAlive.connect(recordKeepAliveGain);
+recordKeepAliveGain.connect(recordDestination);
+recordKeepAlive.start();
+
 async function loadSfx(name, url) {
   try {
     const res = await fetch(url);
@@ -40,6 +65,119 @@ function playSfx(name, volume = 1.0, pitchVariance = 0.08, offset = 0, loop = fa
   gain.connect(recordDestination);
   source.start(0, Math.min(offset, buffer.duration));
   return source;
+}
+
+// A continuous loop for something physically PRESENT for a variable length of time, as opposed
+// to playSfx's loop flag, which is right for a bed that can start and stop dead (the Fire Mage's
+// lava, the Troll's snore).
+//
+// Three things here that a raw `loop = true` does not give:
+//
+//  1. It loops only the SUSTAIN. Measured on sfx_poopman_ult_roll (0.784s): the first 60ms is
+//     1.8x the RMS of the middle and the last 60ms is 0.15x it — an attack at the head and a
+//     decay to near-silence at the tail, because it was recorded as a one-shot. Wrapped whole,
+//     every cycle dips to nothing and then thumps, which over an eight-second boulder is ten
+//     audible thumps. loopStart/loopEnd cut both ends off the looped region.
+//  2. It runs the loop on more than one voice, staggered in phase and slightly apart in playback
+//     rate. One voice repeating a half-second sustain sixteen times is still a half-second
+//     pattern the ear locks onto; two decorrelated copies read as one continuous rumble, and each
+//     one's seam lands where the other is mid-sustain.
+//  3. It owns its own gain, so both ends can be ramped and the level can be ridden while it runs
+//     — a roll that snaps to full the instant the boulder appears and is cut mid-rumble when it
+//     expires is the very seam the loop exists to hide.
+//
+// Returns a handle, or null if the clip never loaded. Every method on the handle is safe to call
+// after it has been stopped.
+function playSfxLoop(name, opts = {}) {
+  const buffer = sfxBuffers[name];
+  if (!buffer) return null;
+
+  const volume = opts.volume !== undefined ? opts.volume : 1;
+  const rate = opts.rate !== undefined ? opts.rate : 1;
+  const fadeIn = opts.fadeIn !== undefined ? opts.fadeIn : 0.15;
+  // Three, measured. Rendering 4s of sfx_poopman_ult_roll offline and taking the RMS envelope
+  // in 20ms windows: the naive whole-clip loop swings with a coefficient of variation of 0.856
+  // and hits absolute silence 46 times; one voice on the trimmed sustain fixes the worst of it,
+  // two gets to cv 0.501 with 8 near-silent windows, three to cv 0.361 with 1. A fourth only
+  // reaches cv 0.304 and buys back a dip, so it is not worth the extra source.
+  const voices = opts.voices !== undefined ? opts.voices : 3;
+  const spread = opts.spread !== undefined ? opts.spread : 0.13;
+  // Fractions of the clip trimmed off each end before looping. Defaults sized for a one-shot
+  // recording: enough off the front to clear an attack, more off the back to clear a decay.
+  const headCut = (opts.headCut !== undefined ? opts.headCut : 0.12) * buffer.duration;
+  const tailCut = (opts.tailCut !== undefined ? opts.tailCut : 0.25) * buffer.duration;
+
+  const loopStart = Math.min(headCut, buffer.duration * 0.4);
+  const loopEnd = Math.max(loopStart + 0.05, buffer.duration - tailCut);
+  const loopLen = loopEnd - loopStart;
+
+  const master = audioCtx.createGain();
+  const now = audioCtx.currentTime;
+  // Exponential ramps cannot touch zero, hence the floor on both ends.
+  master.gain.setValueAtTime(0.0001, now);
+  master.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), now + Math.max(0.01, fadeIn));
+  master.connect(audioCtx.destination);
+  master.connect(recordDestination);
+
+  const sources = [];
+  for (let i = 0; i < voices; i++) {
+    const src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    src.loopStart = loopStart;
+    src.loopEnd = loopEnd;
+    // Centred on `rate`, so the pair sits either side of the intended pitch rather than above it.
+    const off = voices > 1 ? (i / (voices - 1) - 0.5) * spread : 0;
+    src.playbackRate.value = rate * (1 + off);
+    const vg = audioCtx.createGain();
+    // Equal-power-ish, so two voices are not twice as loud as one.
+    vg.gain.value = 1 / Math.sqrt(voices);
+    src.connect(vg);
+    vg.connect(master);
+    // Staggered entry points, so the voices' wrap points never coincide.
+    src.start(0, loopStart + (loopLen * i) / voices);
+    sources.push({ src, vg });
+  }
+
+  let stopped = false;
+  return {
+    get stopped() { return stopped; },
+    setVolume(v, ramp = 0.12) {
+      if (stopped) return;
+      const t = audioCtx.currentTime;
+      try {
+        master.gain.cancelScheduledValues(t);
+        master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), t);
+        master.gain.exponentialRampToValueAtTime(Math.max(0.0002, v), t + Math.max(0.01, ramp));
+      } catch (e) { /* the context can refuse while suspended */ }
+    },
+    setRate(r, ramp = 0.12) {
+      if (stopped) return;
+      const t = audioCtx.currentTime;
+      for (let i = 0; i < sources.length; i++) {
+        const off = sources.length > 1 ? (i / (sources.length - 1) - 0.5) * spread : 0;
+        try {
+          const p = sources[i].src.playbackRate;
+          p.cancelScheduledValues(t);
+          p.setValueAtTime(p.value, t);
+          p.linearRampToValueAtTime(Math.max(0.05, r * (1 + off)), t + Math.max(0.01, ramp));
+        } catch (e) {}
+      }
+    },
+    stop(fadeOut = 0.22) {
+      if (stopped) return;
+      stopped = true;
+      const t = audioCtx.currentTime;
+      try {
+        master.gain.cancelScheduledValues(t);
+        master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), t);
+        master.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.01, fadeOut));
+      } catch (e) {}
+      for (const v of sources) {
+        try { v.src.stop(t + Math.max(0.01, fadeOut) + 0.03); } catch (e) {}
+      }
+    },
+  };
 }
 
 loadSfx("punch", "sfx_punch.mp3");
@@ -118,6 +256,13 @@ loadSfx("trollHit", "sfx_troll_hit.mp3");           // the sweep connecting with
 loadSfx("trollUltHit", "sfx_troll_ult_hit.mp3");    // the rampage's overhead driving into the ground
 loadSfx("trollSnore", "sfx_troll_snore.mp3");       // looped for the whole of the post-rampage sleep — see Troll.updateUltimate
 loadSfx("trollPullout", "sfx_troll_pullout.mp3");   // the club coming back out of the floor at the end of the "stuck" phase
+loadSfx("poopmanShot", "sfx_poopman_shot.mp3");     // 0.31s — one per ordinary shot, well inside the 1.7s reload
+loadSfx("poopmanSpray", "sfx_poopman_spray.mp3");   // 3.29s — cut to the 3.0s spray, with a little tail left over
+loadSfx("poopmanUlt", "sfx_poopman_ult.mp3");       // 1.65s — fires on the launch, not the strain
+loadSfx("poopmanHit", "sfx_poopman_hit.mp3");       // an ordinary shot landing on a body
+loadSfx("poopmanUltHit", "sfx_poopman_ult_hit.mp3");   // the boulder running somebody over
+loadSfx("poopmanRoll", "sfx_poopman_ult_roll.mp3");    // looped under the boulder for as long as it rolls — see playSfxLoop
+loadSfx("poopmanWin", "sfx_poopman_win.mp3");          // the victory
 
 // Browsers suspend AudioContext until a user gesture unlocks it
 function unlockAudio() {

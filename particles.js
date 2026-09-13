@@ -501,6 +501,20 @@ function drawDamageNumbers(ctx) {
 // Wall cracks: a handful of jagged lines that flash in at the impact point and fade out.
 const wallCracks = [];
 
+// Everything transient on the field, thrown away at once. 1v1 never needed this — a round there
+// cuts straight to the next fight and the leftovers are gone within a few frames of it. The
+// relay's lineup draw holds an EMPTY arena on screen for nearly ten seconds (see team5.js), and
+// the previous match's smoke, sparks and wall damage drifting around in it is the first thing
+// the eye lands on.
+function clearFieldEffects() {
+  particles.length = 0;
+  smokePuffs.length = 0;
+  flashes.length = 0;
+  damageNumbers.length = 0;
+  wallCracks.length = 0;
+  speedLines = null;
+}
+
 function spawnWallCrack(x, y) {
   const lines = [];
   const lineCount = 6 + Math.floor(Math.random() * 4);

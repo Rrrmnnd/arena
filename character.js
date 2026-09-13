@@ -61,6 +61,8 @@ class Character {
     this.vy = Math.sin(angle) * speed;
     this.movable = true; // special states (e.g. Giant absorbing) can temporarily disable movement/knockback
     this.pinnedTimer = 0; // >0: held in place but still able to act — see applyPin
+    this.slowTimer = 0;   // >0: moving at slowMul of its normal pace — see applySlow
+    this.slowMul = 1;
 
     // Contact-damage invulnerability window, so one collision doesn't hit multiple frames in a row
     this.hitCooldown = 0;
@@ -143,6 +145,40 @@ class Character {
   applyPin(duration) {
     if (!this.alive || this.immuneToControl) return;
     this.pinnedTimer = Math.max(this.pinnedTimer, duration);
+  }
+
+  // Wading. The first debuff in the game that neither stops a character nor stops it acting: it
+  // only makes it slower, which is the whole identity of the character that inflicts it.
+  //
+  // `mul` is a fraction of normal pace (0.4 = 40%). Stacking takes the HARSHEST multiplier and
+  // the LONGEST remaining time rather than adding, so standing in a puddle while being shot does
+  // not compound into a full stop — this is meant to be inconvenient, not another stun.
+  //
+  // Applied to the current velocity immediately so it bites on the frame it lands; restoreSpeed
+  // below then holds it down, and lets it climb back over SPEED_RESTORE_SECONDS once the timer
+  // runs out, which reads as pulling free of the muck rather than a switch flipping.
+  applySlow(mul, duration) {
+    if (!this.alive || this.immuneToControl) return;
+    const m = Math.max(0.05, Math.min(1, mul));
+    if (this.slowTimer <= 0 || m < this.slowMul) {
+      // Only scale the live velocity when this makes it slower than it already was, or the same
+      // aura re-applying every frame would grind it to a halt.
+      const mag = Math.hypot(this.vx, this.vy);
+      const target = this.speed * m;
+      if (mag > target && mag > 0.01) {
+        this.vx *= target / mag;
+        this.vy *= target / mag;
+      }
+    }
+    this.slowMul = this.slowTimer > 0 ? Math.min(this.slowMul, m) : m;
+    this.slowTimer = Math.max(this.slowTimer, duration);
+  }
+
+  // 1 when not slowed. Read by restoreSpeed, so every character inherits the effect without
+  // knowing about it — including the two that manage their own speed (the Knight's charge ramp
+  // writes this.speed, the Troll computes it from its own state; both are multiplied here).
+  get slowFactor() {
+    return this.slowTimer > 0 ? this.slowMul : 1;
   }
 
   // `movable` is a getter over a plain backing field rather than a plain property, so a pin can
@@ -403,7 +439,7 @@ class Character {
   // by the time this sees it there is nothing left to correct. Its recovery stays instant, and
   // this.speed follows the ramp, so the target is always the right one.
   get restoreSpeed() {
-    return this.speed;
+    return this.speed * this.slowFactor;
   }
 
   restoreOwnSpeed(dt) {
@@ -463,6 +499,10 @@ class Character {
       if (this.deafenedTimer <= 0) this.deafenedMax = 0;
     }
     if (this.pinnedTimer > 0) this.pinnedTimer -= dt;
+    if (this.slowTimer > 0) {
+      this.slowTimer -= dt;
+      if (this.slowTimer <= 0) this.slowMul = 1;
+    }
     if (this.stunTimer > 0) {
       this.stunTimer -= dt;
       if (this.stunTimer <= 0) this.onStunEnd();

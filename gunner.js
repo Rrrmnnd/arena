@@ -418,6 +418,14 @@ class Gunner extends Character {
     const muzzle = this.getMuzzlePoint();
 
     ctx.save();
+    // Clipped to the arena. halfLength is a flat 1100 so the beam always crosses the floor from
+    // wherever the Gunner is standing rather than visibly stopping short — which means it also
+    // always overshoots the far wall by a long way. In the 9:16 frame the canvas edge hid that;
+    // the relay frame is much wider than its arena, so without this the beam runs out across the
+    // margin and through the waiting bench. Drawing only; beamHits is unchanged.
+    ctx.beginPath();
+    ctx.rect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+    ctx.clip();
     ctx.translate(muzzle.x, muzzle.y);
     ctx.rotate(this.aimAngle);
 

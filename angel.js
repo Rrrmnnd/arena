@@ -75,8 +75,12 @@ const ANGEL_ULT_INTERVAL = 16.0;   // between castings
 // were independent before; this makes landing the normal attack feed the rite, so a fight where
 // the bolts connect is visibly a fight where the pentagram comes round sooner.
 const ANGEL_ULT_REFUND = 1.0;
+// The ring, as authored against a 600x600 arena. Read as a ratio to ANGEL_PENTA_REF_HALF rather
+// than as absolute pixels, so the same shape scales to whatever arena the layout uses — see
+// Angel.pentaRadii.
 const ANGEL_PENTA_RX     = 348;
 const ANGEL_PENTA_RY     = 390;
+const ANGEL_PENTA_REF_HALF = 300;   // half of the 600 arena the two above were drawn for
 const ANGEL_PENTA_POINTS = 5;
 const ANGEL_RING_FADE    = 0.5;    // the pentagram drawing itself in, and dissolving at the end
 
@@ -314,21 +318,62 @@ class Angel extends Character {
   }
 
   // ---------------------------------------------------------------- the ultimate: the five rites
+  // The ring has to satisfy two things at once, and they pull against each other: every one of
+  // the five vertices must land OUTSIDE the arena (a spirit standing inside the fight is not a
+  // spirit walking the perimeter), and the whole ellipse should stay INSIDE the canvas.
+  //
+  // The authored 348x390 is not a fixed pair of numbers — it is a SHAPE, 1.16 x 1.30 of the half
+  // width of the 600 arena it was drawn against. Every clearance that makes it work is a ratio
+  // (the top vertex sits at 1.30 of half-height, the -18 pair at 1.10 of half-width, the 54 pair
+  // at 1.05 of half-height), so scaling both radii with the arena keeps all five outside it at
+  // any arena size. That is what lets the relay frame use a 720 arena and still get the same
+  // ring, and it reproduces 348x390 exactly wherever the arena is 600.
+  //
+  // If the frame cannot hold that ring, it is flattened and widened to fit instead. And if no
+  // fitted ellipse can clear the arena — the 720x850 twitch frame is too small in both
+  // directions at once — the proportional one is kept and allowed to overhang the canvas,
+  // exactly as it always has there. A spirit drawn off the bottom of the frame is merely
+  // invisible; a spirit standing inside the arena would be wrong.
+  pentaRadii() {
+    const cx = ARENA.x + ARENA.w / 2, cy = ARENA.y + ARENA.h / 2;
+    const halfW = ARENA.w / 2, halfH = ARENA.h / 2;
+    const FRAME_PAD = 8;    // never let the ring touch the very edge of the canvas
+    const CLEAR = 14;       // how far outside the arena wall a vertex has to sit
+    const C54 = Math.cos(Math.PI * 54 / 180);   // 0.5878
+    const S54 = Math.sin(Math.PI * 54 / 180);   // 0.8090
+
+    const maxRx = Math.min(cx, WIDTH - cx) - FRAME_PAD;
+    const maxRy = Math.min(cy, HEIGHT - cy) - FRAME_PAD;
+
+    // The authored shape, scaled to whatever arena is actually on screen.
+    const wantRx = halfW * (ANGEL_PENTA_RX / ANGEL_PENTA_REF_HALF);
+    const wantRy = halfH * (ANGEL_PENTA_RY / ANGEL_PENTA_REF_HALF);
+    if (wantRx <= maxRx && wantRy <= maxRy) return { cx, cy, rx: wantRx, ry: wantRy };
+
+    // Too tall for this frame: flatten it, and let the lower pair clear on width instead.
+    const ry = Math.min(wantRy, maxRy);
+    let rx = Math.min(wantRx, maxRx);
+    if (S54 * ry < halfH + CLEAR) rx = Math.max(rx, (halfW + CLEAR) / C54);
+    if (rx <= maxRx && ry > halfH + CLEAR) return { cx, cy, rx, ry };
+
+    return { cx, cy, rx: wantRx, ry: wantRy };
+  }
+
   // The i-th vertex of the pentagram ring, starting straight above the arena and going clockwise.
   pentaVertex(i) {
-    const cx = ARENA.x + ARENA.w / 2, cy = ARENA.y + ARENA.h / 2;
+    const { cx, cy, rx, ry } = this.pentaRadii();
     const a = -Math.PI / 2 + (i % ANGEL_PENTA_POINTS) * Math.PI * 2 / ANGEL_PENTA_POINTS;
-    return { x: cx + Math.cos(a) * ANGEL_PENTA_RX, y: cy + Math.sin(a) * ANGEL_PENTA_RY };
+    return { x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry };
   }
 
   // A point part-way along the ring between two adjacent vertices. Interpolated in ANGLE, not in
   // a straight line between the two points, so the spirit follows the ring instead of cutting the
   // corner off it.
   pentaWalk(fromIdx, k) {
-    const cx = ARENA.x + ARENA.w / 2, cy = ARENA.y + ARENA.h / 2;
+    const { cx, cy, rx, ry } = this.pentaRadii();
     const step = Math.PI * 2 / ANGEL_PENTA_POINTS;
     const a = -Math.PI / 2 + (fromIdx + k) * step;
-    return { x: cx + Math.cos(a) * ANGEL_PENTA_RX, y: cy + Math.sin(a) * ANGEL_PENTA_RY };
+    return { x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry };
   }
 
   // Where one spirit is: on its vertex, or part-way along the edge to the next one. The whole
@@ -1240,7 +1285,10 @@ class Angel extends Character {
   drawPentagram(ctx) {
     const k = angelEase(this.ringT);
     if (k <= 0.01) return;
-    const cx = ARENA.x + ARENA.w / 2, cy = ARENA.y + ARENA.h / 2;
+    // Same solver the vertices come from, so the drawn ring and the walked ring are the same
+    // ellipse in every layout — see pentaRadii.
+    const PR = this.pentaRadii();
+    const cx = PR.cx, cy = PR.cy;
     const t = performance.now() / 1000;
     const v = [];
     for (let i = 0; i < ANGEL_PENTA_POINTS; i++) v.push(this.pentaVertex(i));
@@ -1254,12 +1302,12 @@ class Angel extends Character {
     ctx.strokeStyle = HOLY_GOLD;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.ellipse(cx, cy, ANGEL_PENTA_RX, ANGEL_PENTA_RY, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, PR.rx, PR.ry, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 0.16 * k;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.ellipse(cx, cy, ANGEL_PENTA_RX * 0.945, ANGEL_PENTA_RY * 0.945, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, PR.rx * 0.945, PR.ry * 0.945, 0, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.globalAlpha = 0.22 * k;
@@ -1271,8 +1319,8 @@ class Angel extends Character {
       const long = i % 8 === 0;
       const r0 = long ? 0.9 : 0.955, r1 = 1.0;
       ctx.beginPath();
-      ctx.moveTo(cx + c * ANGEL_PENTA_RX * r0, cy + sn * ANGEL_PENTA_RY * r0);
-      ctx.lineTo(cx + c * ANGEL_PENTA_RX * r1, cy + sn * ANGEL_PENTA_RY * r1);
+      ctx.moveTo(cx + c * PR.rx * r0, cy + sn * PR.ry * r0);
+      ctx.lineTo(cx + c * PR.rx * r1, cy + sn * PR.ry * r1);
       ctx.stroke();
     }
 

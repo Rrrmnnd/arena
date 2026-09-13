@@ -1,0 +1,277 @@
+<meta charset="utf-8">
+<title>5v5 cover</title>
+<style>
+  body { margin: 0; background: #16161c; color: #ddd; font: 13px system-ui, sans-serif; }
+  #wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; }
+  #cover { width: 100%; max-width: 1280px; height: auto; display: block;
+           box-shadow: 0 0 0 1px #333; background: #000; }
+  #game { display: none; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  button { font: 600 13px system-ui; padding: 7px 14px; border-radius: 5px; border: 1px solid #555;
+           background: #24242c; color: #eee; cursor: pointer; }
+  button:hover { background: #30303a; }
+  #note { opacity: .6; }
+</style>
+
+<div id="wrap">
+  <canvas id="cover" width="1280" height="720"></canvas>
+  <div class="row">
+    <button id="reroll">Reroll fighters</button>
+    <button id="save">Download PNG</button>
+    <span id="note"></span>
+  </div>
+</div>
+
+<!-- The game's own scripts, so the cover is drawn with the real character art rather than a
+     second copy of it that could drift. main.js needs a #game canvas to exist; it is hidden. -->
+<canvas id="game"></canvas>
+<script src="arena.js?v=475"></script>
+<script src="character.js?v=475"></script>
+<script src="sfx.js?v=475"></script>
+<script src="combat.js?v=475"></script>
+<script src="particles.js?v=475"></script>
+<script src="recorder.js?v=475"></script>
+<script src="giant.js?v=475"></script>
+<script src="punchman.js?v=475"></script>
+<script src="punchman2.js?v=475"></script>
+<script src="demon.js?v=475"></script>
+<script src="bomber.js?v=475"></script>
+<script src="gunner.js?v=475"></script>
+<script src="knight.js?v=475"></script>
+<script src="ninja.js?v=475"></script>
+<script src="virus.js?v=475"></script>
+<script src="firemage.js?v=475"></script>
+<script src="archer.js?v=475"></script>
+<script src="troll.js?v=475"></script>
+<script src="earthmage.js?v=475"></script>
+<script src="angel.js?v=475"></script>
+<script src="lab.js?v=475"></script>
+<script src="team5.js?v=475"></script>
+<script src="twitch.js?v=475"></script>
+<script src="main.js?v=475"></script>
+
+<script>
+// ---------------------------------------------------------------------------------------
+// YouTube cover for the 5v5 relay, 1280x720.
+//
+// Drawn from the characters themselves (their own drawBody, via the same two-pass fitter the
+// squad panels use) so the faces on the cover are exactly the faces in the video.
+// ---------------------------------------------------------------------------------------
+
+const A_COLOR = "#64f064";
+const B_COLOR = "#5aa0ff";
+const GOLD = "#ffdc32";
+
+const cover = document.getElementById("cover");
+const cx2 = cover.getContext("2d");
+
+// Four featured fighters — two a side. Six was too many: a thumbnail is shown about 210px wide
+// in a sidebar, and at that size six figures are a smear. Two big ones a side still reads as
+// "two teams" and leaves the centre column clear for the words.
+let featured = { a: [], b: [] };
+
+function pickFeatured() {
+  // The ones that hold up as silhouettes at small size: distinct outline or strong colour.
+  const wanted = ["Angel", "Giant", "Troll", "Demon", "Knight", "Bomber", "Earth Mage",
+                  "Fire Mage", "Virus", "Soldier", "Punch Man (New)", "Ninja"];
+  const pool = wanted.map(n => ROSTER.findIndex(r => r.label === n)).filter(i => i >= 0);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  featured = { a: pool.slice(0, 2), b: pool.slice(2, 4) };
+}
+
+// The same measure-then-fit approach team5Face uses: `size` is the collision diameter and almost
+// nobody draws inside it, so fitting on that alone clips wings, hats and weapons.
+const faceCache = {};
+function face(idx) {
+  if (faceCache[idx]) return faceCache[idx];
+  const S = 512, PROBE = 512;
+  const f = ROSTER[idx].ctor();
+  f.x = 0; f.y = 0; f.facingAngle = 0; f.lift = 0;
+  const probe = document.createElement("canvas");
+  probe.width = probe.height = PROBE;
+  const pg = probe.getContext("2d");
+  pg.save();
+  pg.translate(PROBE / 2, PROBE / 2);
+  pg.scale(160 / f.size, 160 / f.size);
+  try { f.drawBody(pg); } catch (e) {}
+  pg.restore();
+  const px = pg.getImageData(0, 0, PROBE, PROBE).data;
+  let minX = PROBE, minY = PROBE, maxX = -1, maxY = -1;
+  for (let y = 0; y < PROBE; y++) for (let x = 0; x < PROBE; x++) {
+    if (px[(y * PROBE + x) * 4 + 3] > 24) {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d");
+  if (maxX >= 0) {
+    const k = (S * 0.96) / Math.max(maxX - minX + 1, maxY - minY + 1);
+    g.translate(S / 2, S / 2);
+    g.scale(k, k);
+    g.translate(-(minX + maxX) / 2, -(minY + maxY) / 2);
+    g.drawImage(probe, 0, 0);
+  }
+  faceCache[idx] = c;
+  return c;
+}
+
+// Heavy outline + glow, so the words survive being shrunk to sidebar size.
+function punchText(g, text, x, y, size, fill, glow) {
+  g.save();
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = `900 ${size}px "Arial Black", Impact, system-ui, sans-serif`;
+  g.lineJoin = "round";
+  g.miterLimit = 2;
+  if (glow) { g.shadowColor = glow; g.shadowBlur = size * 0.5; }
+  g.strokeStyle = "#000";
+  g.lineWidth = size * 0.22;
+  g.strokeText(text, x, y);
+  g.shadowBlur = 0;
+  g.strokeStyle = "#000";
+  g.lineWidth = size * 0.1;
+  g.strokeText(text, x, y);
+  g.fillStyle = fill;
+  g.fillText(text, x, y);
+  g.restore();
+}
+
+function drawFighter(g, idx, x, y, h, tint, flip) {
+  const img = face(idx);
+  g.save();
+  g.translate(x, y);
+  if (flip) g.scale(-1, 1);
+
+  // A coloured floor pool, so each side reads as a team even in greyscale thumbnails
+  g.save();
+  g.globalCompositeOperation = "lighter";
+  const pool = g.createRadialGradient(0, h * 0.42, 0, 0, h * 0.42, h * 0.55);
+  pool.addColorStop(0, tint + "88");
+  pool.addColorStop(1, tint + "00");
+  g.fillStyle = pool;
+  g.beginPath();
+  g.ellipse(0, h * 0.42, h * 0.55, h * 0.18, 0, 0, Math.PI * 2);
+  g.fill();
+  g.restore();
+
+  // Rim glow behind the body
+  g.save();
+  g.shadowColor = tint;
+  g.shadowBlur = h * 0.18;
+  g.drawImage(img, -h / 2, -h / 2, h, h);
+  g.shadowBlur = h * 0.1;
+  g.drawImage(img, -h / 2, -h / 2, h, h);
+  g.restore();
+
+  g.drawImage(img, -h / 2, -h / 2, h, h);
+  g.restore();
+}
+
+function draw() {
+  const W = 1280, H = 720;
+  const g = cx2;
+  g.clearRect(0, 0, W, H);
+
+  // ---- background: the game's own night, lit from the middle
+  g.fillStyle = "#06060d";
+  g.fillRect(0, 0, W, H);
+  const glow = g.createRadialGradient(W / 2, H * 0.52, 0, W / 2, H * 0.52, W * 0.62);
+  glow.addColorStop(0, "rgba(70,70,140,0.55)");
+  glow.addColorStop(0.5, "rgba(30,30,70,0.30)");
+  glow.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = glow;
+  g.fillRect(0, 0, W, H);
+
+  // team colour wash into each corner
+  for (const [tint, dir] of [[A_COLOR, 0], [B_COLOR, 1]]) {
+    const gx = dir ? W : 0;
+    const wash = g.createRadialGradient(gx, H * 0.6, 0, gx, H * 0.6, W * 0.5);
+    wash.addColorStop(0, tint + "33");
+    wash.addColorStop(1, tint + "00");
+    g.fillStyle = wash;
+    g.fillRect(0, 0, W, H);
+  }
+
+  // floor grid, faint, for depth
+  g.strokeStyle = "rgba(120,140,220,0.10)";
+  g.lineWidth = 2;
+  for (let i = 0; i <= 16; i++) {
+    const x = (i / 16) * W;
+    g.beginPath(); g.moveTo(x, H * 0.55); g.lineTo(W / 2 + (x - W / 2) * 2.2, H); g.stroke();
+  }
+  for (let i = 1; i <= 5; i++) {
+    const y = H * 0.55 + Math.pow(i / 5, 1.8) * H * 0.45;
+    g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+  }
+
+  // ---- the two squads. Kept inside the outer thirds so the centre column stays clear for the
+  // words: nothing legible should ever have a face behind it.
+  const lay = [
+    // The front one is allowed to bleed a little off the frame edge — it implies the squad
+    // continues past it. The one behind must NOT: its head was being cut off at the corner.
+    { h: 404, x: 0.150, y: 0.618 },
+    { h: 268, x: 0.112, y: 0.300 },
+  ];
+  featured.a.forEach((idx, i) => drawFighter(g, idx, W * lay[i].x, H * lay[i].y, lay[i].h, A_COLOR, false));
+  featured.b.forEach((idx, i) => drawFighter(g, idx, W * (1 - lay[i].x), H * lay[i].y, lay[i].h, B_COLOR, true));
+
+  // ---- the clash down the middle, behind the words
+  g.save();
+  const seam = g.createLinearGradient(W / 2 - 150, 0, W / 2 + 150, 0);
+  seam.addColorStop(0, "rgba(255,220,80,0)");
+  seam.addColorStop(0.5, "rgba(255,240,180,0.26)");
+  seam.addColorStop(1, "rgba(255,220,80,0)");
+  g.fillStyle = seam;
+  g.fillRect(W / 2 - 150, 0, 300, H);
+  g.restore();
+
+  // ---- the words, all in the clear centre column
+  punchText(g, "5v5", W / 2, 232, 228, GOLD, "rgba(255,190,40,0.95)");
+  punchText(g, "WHO WINS?", W / 2, 428, 86, "#ffffff", "rgba(0,0,0,0.9)");
+
+  // The one rule that makes this format different, and the only warm accent besides the gold.
+  g.save();
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = '900 34px "Arial Black", Impact, system-ui, sans-serif';
+  const tag = "WINNER STAYS ON";
+  const tw = g.measureText(tag).width + 48;
+  const ty = 552;
+  g.fillStyle = "#c81e28";
+  g.strokeStyle = "#000";
+  g.lineWidth = 6;
+  g.beginPath();
+  if (g.roundRect) g.roundRect(W / 2 - tw / 2, ty - 31, tw, 62, 14);
+  else g.rect(W / 2 - tw / 2, ty - 31, tw, 62);
+  g.fill();
+  g.stroke();
+  g.fillStyle = "#fff";
+  g.fillText(tag, W / 2, ty + 1);
+  g.restore();
+
+  document.getElementById("note").textContent =
+    featured.a.map(i => ROSTER[i].label).join(" / ") + "  vs  " +
+    featured.b.map(i => ROSTER[i].label).join(" / ");
+}
+
+function boot() {
+  if (typeof ROSTER === "undefined") { setTimeout(boot, 60); return; }
+  pickFeatured();
+  draw();
+}
+document.getElementById("reroll").onclick = () => { pickFeatured(); draw(); };
+document.getElementById("save").onclick = () => {
+  cover.toBlob((b) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(b);
+    a.download = "5v5-cover.png";
+    a.click();
+  }, "image/png");
+};
+boot();
+</script>

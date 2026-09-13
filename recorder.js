@@ -15,8 +15,19 @@ const RECORD_VIDEO_BITRATE = 30_000_000; // 30 Mbps — generous headroom for 4K
 // pass into (see drawFrame() in main.js) — recording from this instead of the visible
 // 720x1280 canvas means the saved video has real high-res detail, not just an upscaled blur.
 const recordCanvas = document.createElement("canvas");
-recordCanvas.width = WIDTH * RECORD_SCALE;
-recordCanvas.height = HEIGHT * RECORD_SCALE;
+
+// RECORD_SCALE is the default; a layout may override it (ARENA_LAYOUTS.<name>.recordScale in
+// arena.js). The 16:9 relay frame is already authored at 1920x1080, and doubling that would be
+// 3840x2160 — 8.3 megapixels, the exact figure that made a 3x portrait frame stutter above. It
+// records 1:1 instead, which is both the intended delivery resolution and LESS total per-frame
+// drawing than the portrait frame does today.
+function recordScale() {
+  const L = typeof ARENA_LAYOUTS !== "undefined" && ARENA_LAYOUTS[arenaLayout];
+  return (L && L.recordScale) || RECORD_SCALE;
+}
+
+recordCanvas.width = WIDTH * recordScale() * layoutZoom();
+recordCanvas.height = HEIGHT * recordScale() * layoutZoom();
 const recordCtx = recordCanvas.getContext("2d");
 
 let mediaRecorder = null;
@@ -28,8 +39,10 @@ let canvasStream = null; // created once and reused every round — a fresh capt
 // new frame size. The existing capture stream is tied to the old dimensions, so it's dropped
 // and lazily rebuilt at the new size on the next recording.
 function resizeRecordCanvas() {
-  recordCanvas.width = WIDTH * RECORD_SCALE;
-  recordCanvas.height = HEIGHT * RECORD_SCALE;
+  // WIDTH/HEIGHT are logical; the layout zoom is what turns them into the delivered frame.
+  const s = recordScale() * layoutZoom();
+  recordCanvas.width = WIDTH * s;
+  recordCanvas.height = HEIGHT * s;
   canvasStream = null;
 }
 

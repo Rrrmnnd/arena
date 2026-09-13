@@ -12,8 +12,9 @@ const ARENA_BORDER  = 14;
 // used only while parked waiting for/showing a Channel Points-triggered fight — see
 // twitch.js's enterTwitchIdle() and main.js's triggerTwitchBattle(). Deliberately NOT just a
 // smaller version of "portrait" globally: the character-select screen's own roster-picker
-// layout (SETUP_ROSTER_START_Y etc. in main.js) needs the full portrait height to fit all 9
-// entries, and openSetup() always forces the canvas back to "portrait" before showing it
+// layout (SETUP_ROSTER_START_Y etc. in main.js) needs the full portrait height to fit the whole
+// cast — see setupRowPitch, which tightens the row spacing as the roster grows — and openSetup()
+// always forces the canvas back to "portrait" before showing it
 // regardless of whichever of these was active, so that screen is unaffected either way.
 // WIDTH/HEIGHT/ARENA (and TITLE_Y/HUD_Y, for whichever layouts actually use those) are read
 // fresh on every use across the codebase, so swapping them here re-lays-out everything — the
@@ -22,6 +23,52 @@ const ARENA_LAYOUTS = {
   portrait: { w: 720,  h: 1280, arena: { x: ARENA_MARGIN, y: 370, w: 600, h: 600 }, titleY: 100, hudY: 190 },
   lab:      { w: 1280, h: 720,  arena: { x: 24, y: 92, w: 892, h: 604 } }, // no titleY/hudY — lab draws its own title/panel independently of drawTitle()/HUD_Y
   twitch:   { w: 720,  h: 850,  arena: { x: ARENA_MARGIN, y: 220, w: 600, h: 600 }, titleY: 40, hudY: 75 },
+  // 16:9 for ordinary (non-Shorts) video, used by the 5-a-side relay. Authored at full
+  // 1920x1080 and recorded 1:1 (recordScale 1) rather than at 1280x720 doubled, because the
+  // height is what everything else hangs off:
+  //
+  //   - the arena keeps its 600x600, so every number ever tuned against it carries over,
+  //   - and with 240px of clear frame above and below it, the Angel's pentagram fits at its
+  //     authored 348x390 — the exact ring the 9:16 frame uses. At 1280x720 there was only 60px
+  //     of vertical room, which forced the ring flat and 534 wide, straight through both squad
+  //     columns. See Angel.pentaRadii.
+  //
+  // The ring then spans x 612..1308 against an arena at 660..1260, so a column narrower than
+  // 612 never covers any of it. No hudY — the fighters' HUDs live inside those columns rather
+  // than in a band across the top.
+  // The relay frame, and the one layout that draws at a zoom.
+  //
+  // w/h here are LOGICAL units — the coordinate space every piece of drawing and every piece of
+  // simulation works in. The canvas is 1920x1080 and the whole frame is drawn through a single
+  // scale(zoom) (see applyLayout/render in main.js), so 1371x771 logical fills it exactly.
+  //
+  // The point of the zoom is that it scales EVERYTHING spatial at once: bodies, the Fire Mage's
+  // lava pools, its tentacle reach, blast radii, projectile speeds, pillar heights, the lot.
+  // There are ~100 named spatial constants across the character files plus a great many inline
+  // literals, and scaling them by hand would be both enormous and permanently fragile. A zoom
+  // gets all of them, exactly, for free — and cannot drift.
+  //
+  // So the arena is 690x490 in the units the game was tuned in — 0.94x the area of the 600x600
+  // it was balanced against, rather than the 1.92x that a literal 960x720 arena was — while
+  // measuring 966x686 on screen with every fighter and every effect drawn 1.4x bigger.
+  //
+  // 690x490 is near the ceiling: the Angel's ring is 1.16/1.30 of the arena's half-width/height
+  // and a spirit overhangs its own vertex by 84 logical units, which caps the ON-SCREEN arena at
+  // about 1000x700 whatever zoom is chosen. See Angel.pentaRadii.
+  //
+  // TWO arenas. The squad boards are only up during the lineup draw, and they take a 300px
+  // column off each side; the moment the draw hands over they go away and the arena opens out
+  // into the space they were using. `boardArena` is the narrow one that fits beside them,
+  // `arena` is the one the match is actually fought in. See team5SetArena.
+  //
+  // 900 rather than the 1100 the ring would still allow: widening costs balance quickly once the
+  // arena stops resembling the 600x600 everything was tuned against — measured average win-rate
+  // shift is 3.8 at 690, 7.9 at 900, 11.5 at 1000 and 11.2 at 1100. 900 buys 30% more width on
+  // screen for the smallest real cost.
+  landscape: { w: 1920 / 1.4, h: 1080 / 1.4, zoom: 1.4,
+               arena: { x: (1920 / 1.4 - 900) / 2, y: 195, w: 900, h: 490 },
+               boardArena: { x: (1920 / 1.4 - 690) / 2, y: 195, w: 690, h: 490 },
+               titleY: 32, recordScale: 1 },
 };
 
 let WIDTH  = ARENA_LAYOUTS.portrait.w;
@@ -42,6 +89,13 @@ let arenaLayout = "portrait";
 // Every drawn string that differs goes through here, so there is exactly one place that decides.
 function L(en, zh) {
   return arenaLayout === "twitch" ? zh : en;
+}
+
+// The scale the whole frame is drawn at. 1 everywhere except the relay layout, so the 9:16
+// battle, the Twitch overlay and the lab are all untouched and pixel-identical.
+function layoutZoom() {
+  const L = ARENA_LAYOUTS[arenaLayout];
+  return (L && L.zoom) || 1;
 }
 
 function setArenaLayout(name) {
@@ -141,5 +195,9 @@ function drawTitle(ctx, text = "Battle Arena") {
 // HUD panels. Character.drawHud() and Demon's override (which can't call the base method — see
 // there) both read this so the two stay in lockstep.
 function hudNameFont() {
-  return arenaLayout === "twitch" ? "bold 30px Arial" : "bold 22px Arial";
+  // Logical units, so the relay layout's value is what 22px looks like once the frame's 1.4x
+  // zoom is applied — the same size on screen as everywhere else, in a narrower column.
+  if (arenaLayout === "twitch") return "bold 30px Arial";
+  if (arenaLayout === "landscape") return "bold 16px Arial";
+  return "bold 22px Arial";
 }
