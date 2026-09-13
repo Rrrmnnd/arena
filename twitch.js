@@ -13,7 +13,17 @@
 const TWITCH_CLIENT_ID = "dja2s96ae7sab7cc10w5afluelemo5";
 const TWITCH_SCOPE = "channel:read:redemptions";
 const TWITCH_TOKEN_KEY = "twitchAccessToken";
+// One reward title per mode, each remembered separately so a channel can offer "random duel" and
+// "BATTLE ROYALE" as two different Channel Points rewards at two different prices.
+//
+// The 1v1 key keeps its original name on purpose: a channel that was already set up before the
+// other modes existed still finds its reward title in localStorage and keeps working untouched.
 const TWITCH_REWARD_KEY = "twitchRewardName";
+const TWITCH_REWARD_KEYS = {
+  "1v1": TWITCH_REWARD_KEY,
+  royale: "twitchRewardNameRoyale",
+  gauntlet: "twitchRewardNameGauntlet",
+};
 // Re-checks the token's still valid periodically so an expiry (Twitch user tokens are generally
 // good for only a few hours) gets caught and turned into a visible "please log in again" state
 // instead of the integration just silently going deaf to redemptions.
@@ -40,8 +50,42 @@ function twitchAuthorizeUrl() {
   return `https://id.twitch.tv/oauth2/authorize?${params.toString()}`;
 }
 
+function twitchRewardNameFor(mode) {
+  return (localStorage.getItem(TWITCH_REWARD_KEYS[mode]) || "").trim();
+}
+
 function twitchRewardName() {
-  return (localStorage.getItem(TWITCH_REWARD_KEY) || "").trim();
+  return twitchRewardNameFor("1v1");
+}
+
+// Which mode a redeemed reward title asks for, or null to ignore the redemption entirely.
+//
+// The specific modes are matched first and only on an exact (case-insensitive) title, so they can
+// never swallow a redemption meant for something else. 1v1 is checked last and keeps the
+// behaviour it has always had: an empty box means "fire on ANY redemption", which is what a
+// channel with exactly one reward set up relies on. That fallback stays off unless its own box is
+// empty, so filling all three in gives three exact matches and nothing else fires.
+function twitchModeForTitle(title) {
+  const t = (title || "").trim().toLowerCase();
+  for (const mode of ["royale", "gauntlet"]) {
+    const wanted = twitchRewardNameFor(mode).toLowerCase();
+    if (wanted && t === wanted) return mode;
+  }
+  const one = twitchRewardName().toLowerCase();
+  if (!one || t === one) return "1v1";
+  return null;
+}
+
+// What the panel reports it is listening for, e.g. 「對戰」/大亂鬥「亂鬥」.
+function twitchListeningSummary() {
+  const labels = { "1v1": "對戰", royale: "大亂鬥", gauntlet: "車輪戰" };
+  const parts = [];
+  for (const mode of ["1v1", "royale", "gauntlet"]) {
+    const name = twitchRewardNameFor(mode);
+    if (name) parts.push(`${labels[mode]}「${name}」`);
+  }
+  if (!twitchRewardName()) parts.unshift("對戰(任何兌換)");
+  return parts.join("　");
 }
 
 function setTwitchStatus(text, isError = false) {
@@ -124,7 +168,7 @@ function openTwitchSocket(url) {
     if (type === "session_welcome") {
       armTwitchKeepalive(msg.payload.session.keepalive_timeout_seconds || 10);
       subscribeToRedemptions(twitchToken, twitchUserId, msg.payload.session.id)
-        .then(() => setTwitchStatus(`已連線：${twitchLogin}　監聽兌換：「${twitchRewardName() || "(尚未設定)"}」`))
+        .then(() => setTwitchStatus(`已連線：${twitchLogin}　監聽兌換：${twitchListeningSummary()}`))
         .catch((e) => setTwitchStatus("訂閱失敗：" + e.message, true));
       return;
     }
@@ -143,11 +187,8 @@ function openTwitchSocket(url) {
     if (type === "notification") {
       armTwitchKeepalive(10);
       const event = msg.payload.event;
-      const wanted = twitchRewardName();
-      const title = (event.reward && event.reward.title || "").trim();
-      if (!wanted || title.toLowerCase() === wanted.toLowerCase()) {
-        triggerTwitchBattle();
-      }
+      const which = twitchModeForTitle(event.reward && event.reward.title);
+      if (which) triggerTwitchBattle(which);
       return;
     }
   };
@@ -219,18 +260,31 @@ function initTwitchPanel() {
   const btn = document.getElementById("twitchLoginBtn");
   if (btn) btn.addEventListener("click", () => { window.location.href = twitchAuthorizeUrl(); });
 
-  const rewardInput = document.getElementById("twitchRewardInput");
-  if (rewardInput) {
-    rewardInput.value = twitchRewardName();
-    rewardInput.addEventListener("change", () => {
-      localStorage.setItem(TWITCH_REWARD_KEY, rewardInput.value.trim());
-    });
+  // One box and one test button per mode. The 1v1 pair keeps its original element ids so
+  // nothing else referring to them has to change.
+  const inputIds = {
+    "1v1": "twitchRewardInput",
+    royale: "twitchRewardInputRoyale",
+    gauntlet: "twitchRewardInputGauntlet",
+  };
+  const testIds = {
+    "1v1": "twitchTestBtn",
+    royale: "twitchTestBtnRoyale",
+    gauntlet: "twitchTestBtnGauntlet",
+  };
+  for (const mode of ["1v1", "royale", "gauntlet"]) {
+    const input = document.getElementById(inputIds[mode]);
+    if (input) {
+      input.value = twitchRewardNameFor(mode);
+      input.addEventListener("change", () => {
+        localStorage.setItem(TWITCH_REWARD_KEYS[mode], input.value.trim());
+      });
+    }
+    // Fires that mode without needing an actual live redemption — for checking the reward-name
+    // filter and the whole idle<->battle<->idle cycle actually works before going live with it.
+    const testBtn = document.getElementById(testIds[mode]);
+    if (testBtn) testBtn.addEventListener("click", () => triggerTwitchBattle(mode));
   }
-
-  // Fires a battle without needing an actual live redemption — for checking the reward-name
-  // filter and the whole idle<->battle<->idle cycle actually works before going live with it.
-  const testBtn = document.getElementById("twitchTestBtn");
-  if (testBtn) testBtn.addEventListener("click", () => triggerTwitchBattle());
 
   // OBS's built-in Browser Source runs an older bundled Chromium that frequently can't handle
   // Twitch's own login/consent page properly (the Authorize button ends up stuck disabled) — the
@@ -291,9 +345,11 @@ function toggleTwitchPanel() {
 }
 
 window.addEventListener("keydown", (e) => {
-  if ((e.key === "t" || e.key === "T") && document.activeElement !== document.getElementById("twitchRewardInput")) {
-    toggleTwitchPanel();
-  }
+  if (e.key !== "t" && e.key !== "T") return;
+  // Ignored while typing into any of the panel's own fields, so the letter still types normally.
+  const el = document.activeElement;
+  if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+  toggleTwitchPanel();
 });
 
 initTwitchPanel();

@@ -31,7 +31,7 @@ const ROSTER = [
   // same treatment every character gets until its numbers have been measured.
   { label: "Angel", ctor: () => new Angel(0, 0) },
   // Brand new and not balance-tested yet, so kept out of the Twitch random draw for now.
-  { label: "Poop Man", ctor: () => new PoopMan(0, 0), excludeFromTwitch: true },
+  { label: "Poop Man", ctor: () => new PoopMan(0, 0) },
 ];
 
 let gameMode = "1v1"; // "1v1" | "vsboss" | "team5" | "lab" — which mode the setup screen has toggled
@@ -265,20 +265,42 @@ function discardRecording() {
 // does anything while genuinely idle (mode === "twitchIdle") — a redemption arriving mid-fight,
 // or while someone's mid-way through the manual setup screen, is just dropped rather than
 // interrupting whatever's already showing on stream.
-function triggerTwitchBattle() {
+// `which` is the mode a redemption asked for: "1v1" (the original behaviour and the default),
+// "royale", or "gauntlet". Each has its own Channel Points reward name — see twitch.js.
+//
+// The 5-a-side relay is deliberately NOT offered here. Its squad boards, bench columns and
+// board-vs-match arena swap are all authored against the 16:9 landscape frame, and everything
+// streamed has to stay in the 720x850 overlay frame so the OBS Browser Source does not change
+// shape underneath the stream mid-round.
+function triggerTwitchBattle(which = "1v1") {
   if (mode !== "twitchIdle") return;
 
-  gameMode = "1v1";
   const eligible = ROSTER.map((r, i) => i).filter((i) => !ROSTER[i].excludeFromTwitch);
+
+  twitchRoundActive = true;
+  mode = "battle";
+  // Before the mode starts: every one of them places fighters using ARENA, so the frame has to
+  // be settled first. Defensive anyway — enterTwitchIdle() is the only path here and sets it.
+  applyLayout("twitch");
+
+  if (which === "royale") {
+    gameMode = "royale";
+    startRoyaleRound(true);
+    return;
+  }
+  if (which === "gauntlet") {
+    gameMode = "gauntlet";
+    startGauntletRun(eligible[Math.floor(Math.random() * eligible.length)], true);
+    return;
+  }
+
+  gameMode = "1v1";
   let a = eligible[Math.floor(Math.random() * eligible.length)];
   let b;
   do { b = eligible[Math.floor(Math.random() * eligible.length)]; } while (b === a);
   pickA = a;
   pickB = b;
 
-  twitchRoundActive = true;
-  mode = "battle";
-  applyLayout("twitch"); // defensive — should already be set by enterTwitchIdle(), the only path here
   reset();
   roundState = "playing";
   endTimer = 0;
@@ -1255,6 +1277,14 @@ function render(time) {
   if (!paused && gameMode === "royale" && mode === "battle" && royaleState === "ended") {
     royaleEndTimer += dt;
     if (royaleEndTimer >= ROUND_END_GRACE) {
+      // A streamed round has no recording to keep and nobody at the keyboard to answer a
+      // prompt — drop straight back to the waiting screen. Same exit the duel takes.
+      if (twitchRoundActive) {
+        if (isRecording) stopRecording();
+        twitchRoundActive = false;
+        mode = "twitchIdle";
+        royaleState = "prompting";   // parked; the next redemption starts a fresh round
+      }
       royaleState = "prompting";
       stopRecording().then((blob) => {
         royalePendingBlob = blob;
@@ -1268,6 +1298,12 @@ function render(time) {
   if (!paused && gameMode === "gauntlet" && mode === "battle" && gauntletState === "ended") {
     gauntletEndTimer += dt;
     if (gauntletEndTimer >= ROUND_END_GRACE) {
+      if (twitchRoundActive) {
+        if (isRecording) stopRecording();
+        twitchRoundActive = false;
+        mode = "twitchIdle";
+        gauntletState = "prompting";   // parked; the next redemption starts a fresh round
+      }
       gauntletState = "prompting";
       stopRecording().then((blob) => {
         gauntletPendingBlob = blob;

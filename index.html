@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Battle Arena</title>
-<link rel="stylesheet" href="style.css?v=535">
+<link rel="stylesheet" href="style.css?v=536">
 </head>
 <body>
 <canvas id="game" width="720" height="1280"></canvas>
@@ -16,8 +16,14 @@
 <div id="twitchPanel" class="hidden">
   <button id="twitchLoginBtn" type="button">連接 Twitch</button>
   <div id="twitchStatus">尚未連接</div>
-  <label>兌換獎勵名稱：<input id="twitchRewardInput" type="text" placeholder="例如：隨機對戰"></label>
-  <button id="twitchTestBtn" type="button">🎲 測試</button>
+  <!-- One reward title per mode. Leaving the 1v1 box empty keeps its long-standing meaning of
+       "fire a duel on ANY redemption"; filling it in makes all three exact matches. -->
+  <label>1v1 獎勵名稱：<input id="twitchRewardInput" type="text" placeholder="例如：隨機對戰"></label>
+  <button id="twitchTestBtn" type="button">🎲 測試 1v1</button>
+  <label>大亂鬥獎勵名稱：<input id="twitchRewardInputRoyale" type="text" placeholder="例如：全員大亂鬥"></label>
+  <button id="twitchTestBtnRoyale" type="button">🎲 測試大亂鬥</button>
+  <label>車輪戰獎勵名稱：<input id="twitchRewardInputGauntlet" type="text" placeholder="例如：車輪戰"></label>
+  <button id="twitchTestBtnGauntlet" type="button">🎲 測試車輪戰</button>
   <button id="twitchResumeBtn" type="button" class="hidden">▶ 恢復待機</button>
   <!-- OBS's built-in browser (an older Chromium build) frequently can't handle Twitch's own
        login/consent page — the Authorize button ends up stuck greyed-out. Workaround: log in on
@@ -34,32 +40,32 @@
 <!-- ?v= is bumped by hand whenever any script below changes, so the browser can't serve a
      stale-cached file alongside fresh ones (a mix of old/new files across these tightly
      coupled scripts throws at runtime instead of just looking outdated). -->
-<script src="arena.js?v=535"></script>
-<script src="character.js?v=535"></script>
-<script src="sfx.js?v=535"></script>
-<script src="combat.js?v=535"></script>
-<script src="particles.js?v=535"></script>
-<script src="recorder.js?v=535"></script>
-<script src="giant.js?v=535"></script>
-<script src="punchman.js?v=535"></script>
-<script src="punchman2.js?v=535"></script>
-<script src="demon.js?v=535"></script>
-<script src="bomber.js?v=535"></script>
-<script src="gunner.js?v=535"></script>
-<script src="knight.js?v=535"></script>
-<script src="ninja.js?v=535"></script>
-<script src="virus.js?v=535"></script>
-<script src="firemage.js?v=535"></script>
-<script src="archer.js?v=535"></script>
-<script src="troll.js?v=535"></script>
-<script src="earthmage.js?v=535"></script>
-<script src="angel.js?v=535"></script>
-<script src="lab.js?v=535"></script>
-<script src="poopman.js?v=535"></script>
-<script src="team5.js?v=535"></script>
-<script src="gauntlet.js?v=535"></script>
-<script src="royale.js?v=535"></script>
-<script src="twitch.js?v=535"></script>
-<script src="main.js?v=535"></script>
+<script src="arena.js?v=536"></script>
+<script src="character.js?v=536"></script>
+<script src="sfx.js?v=536"></script>
+<script src="combat.js?v=536"></script>
+<script src="particles.js?v=536"></script>
+<script src="recorder.js?v=536"></script>
+<script src="giant.js?v=536"></script>
+<script src="punchman.js?v=536"></script>
+<script src="punchman2.js?v=536"></script>
+<script src="demon.js?v=536"></script>
+<script src="bomber.js?v=536"></script>
+<script src="gunner.js?v=536"></script>
+<script src="knight.js?v=536"></script>
+<script src="ninja.js?v=536"></script>
+<script src="virus.js?v=536"></script>
+<script src="firemage.js?v=536"></script>
+<script src="archer.js?v=536"></script>
+<script src="troll.js?v=536"></script>
+<script src="earthmage.js?v=536"></script>
+<script src="angel.js?v=536"></script>
+<script src="lab.js?v=536"></script>
+<script src="poopman.js?v=536"></script>
+<script src="team5.js?v=536"></script>
+<script src="gauntlet.js?v=536"></script>
+<script src="royale.js?v=536"></script>
+<script src="twitch.js?v=536"></script>
+<script src="main.js?v=536"></script>
 </body>
 </html>

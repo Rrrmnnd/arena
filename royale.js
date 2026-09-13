@@ -64,7 +64,8 @@ function royalePlace() {
   });
 }
 
-function startRoyaleRound() {
+// `forStream` is a Twitch-triggered round: no clip recording, same reason as the gauntlet's.
+function startRoyaleRound(forStream = false) {
   if (isRecording) stopRecording();
   // Pillars are registered globally so projectiles can be blocked without knowing who raised
   // them; a previous round's Earth Mage would go on blocking things here. See combat.js.
@@ -90,7 +91,7 @@ function startRoyaleRound() {
 
   matchTitle = `Battle Royale — ${royaleFighters.length} fighters`;
   document.title = matchTitle;
-  startRecording();
+  if (!forStream) startRecording();
 }
 
 // Everything a fighter is allowed to shoot at: every other fighter still standing, plus their

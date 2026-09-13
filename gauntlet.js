@@ -38,11 +38,10 @@ const GAUNTLET_HEAL_ON_WIN = 0.30;
 // starts. The walk-on runs across it rather than the body appearing when it expires.
 const GAUNTLET_SWAP_DELAY = 1.6;
 
-// The progress strip, in the clear band below the arena in the portrait frame (the arena ends
-// at y=970 of 1280).
+// The progress strip. Its Y is derived from the arena rather than fixed, so it follows the
+// frame instead of falling off the bottom of a shorter one — see drawGauntletProgress.
 const GAUNTLET_PIP = 34;
 const GAUNTLET_PIP_GAP = 5;
-const GAUNTLET_STRIP_Y = 1035;
 
 let gauntletHeroIdx = null;     // ROSTER index of the challenger
 let gauntletFoeIdx = null;      // ROSTER index of whoever is in front of them right now
@@ -74,7 +73,10 @@ function gauntletPool(heroIdx) {
   return ROSTER.map((_, i) => i).filter((i) => i !== heroIdx);
 }
 
-function startGauntletRun(heroIdx) {
+// `forStream` is a Twitch-triggered run: no clip recording is started, because that mode is
+// meant to be captured by OBS as a whole scene and its keep/discard prompt needs a keypress
+// nobody is there to give. See triggerTwitchBattle in main.js.
+function startGauntletRun(heroIdx, forStream = false) {
   if (isRecording) stopRecording();
   // Stone pillars are registered globally so projectiles can be blocked without knowing who put
   // them there — a previous run's Earth Mage would go on blocking things here. See combat.js.
@@ -110,7 +112,7 @@ function startGauntletRun(heroIdx) {
   gauntletState = "playing";
   matchTitle = `${fighterA.name} — Gauntlet`;
   document.title = matchTitle;
-  startRecording();
+  if (!forStream) startRecording();
 }
 
 // Where the next challenger appears: the far side of the arena from the survivor, so nobody ever
@@ -238,6 +240,22 @@ function drawGauntletHud(ctx) {
 function drawGauntletProgress(ctx) {
   const total = gauntletOrder.length;
   if (!total) return;
+
+  // The strip lives in the band under the arena, which the 9:16 battle frame has 310px of. The
+  // Twitch overlay frame is 720x850 and has THIRTY — so there, the score degrades to a single
+  // line. Drawing the faces anyway would put them on top of the fight.
+  const roomBelow = HEIGHT - (ARENA.y + ARENA.h);
+  if (roomBelow < GAUNTLET_PIP + 56) {
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffdc32";
+    ctx.font = "bold 18px Arial";
+    ctx.fillText(`${gauntletBeaten.length} / ${total} DEFEATED`,
+                 WIDTH / 2, ARENA.y + ARENA.h + Math.min(22, roomBelow - 4));
+    ctx.restore();
+    return;
+  }
+
   const pitch = GAUNTLET_PIP + GAUNTLET_PIP_GAP;
   // Squeezed to fit however many are in the running order, so adding characters cannot push the
   // strip off the sides the way the picker's fixed pitch once did.
@@ -246,7 +264,7 @@ function drawGauntletProgress(ctx) {
   const pip = GAUNTLET_PIP * scale;
   const step = pitch * scale;
   let x = WIDTH / 2 - (total * step - GAUNTLET_PIP_GAP * scale) / 2;
-  const y = GAUNTLET_STRIP_Y;
+  const y = ARENA.y + ARENA.h + 65;
 
   ctx.save();
   ctx.textAlign = "center";
